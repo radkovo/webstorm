@@ -40,15 +40,15 @@ public class TreeTagger implements NodeJoinAnalyzer
         {
             is = new GZIPInputStream(ClassLoader.getSystemResourceAsStream("3class.gz"));
             sharedClassifier = CRFClassifier.getClassifier(is);
-        } catch (IOException e1)
+        } catch (IOException e)
         {
-            e1.printStackTrace();
+            System.err.println("Load failed: " + e.getMessage());
         } catch (ClassCastException e)
         {
-            e.printStackTrace();
+            System.err.println("Load failed: " + e.getMessage());
         } catch (ClassNotFoundException e)
         {
-            e.printStackTrace();
+            System.err.println("Load failed: " + e.getMessage());
         }
     }
     

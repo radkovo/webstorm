@@ -32,7 +32,7 @@ import backtype.storm.tuple.Tuple;
 public class RDFStorageBolt implements IRichBolt
 {
     private static final long serialVersionUID = 1L;
-    private static final Logger log = LoggerFactory.getLogger(WebRdfBolt.class);
+    private static final Logger log = LoggerFactory.getLogger(RDFStorageBolt.class);
     
     private String storageDir;
     private OutputCollector collector;
