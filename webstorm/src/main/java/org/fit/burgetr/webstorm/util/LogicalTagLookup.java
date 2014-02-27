@@ -77,8 +77,9 @@ public class LogicalTagLookup
                     System.out.print("    ");
                     while (pp != null)
                     {
-                        if (pp.getText() != null && !pp.getText().isEmpty())
-                            System.out.print(" / " + pp.getText());
+                        String pt = pp.getText();
+                        if (pt != null && !pt.isEmpty())
+                            System.out.print(" / " + pt);
                         pp = pp.getParentNode();
                     }
                     System.out.println();
