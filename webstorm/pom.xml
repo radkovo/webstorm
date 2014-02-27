@@ -32,6 +32,11 @@
 				<enabled>false</enabled>
 			</snapshots>
 		</repository>
+		<repository>
+			<id>project.local</id>
+			<name>project</name>
+			<url>file:${project.basedir}/repo</url>
+		</repository>
 	</repositories>
 
 	<build>
@@ -107,6 +112,11 @@
 			<groupId>net.sf.cssbox</groupId>
 			<artifactId>pdf2dom</artifactId>
 			<version>1.2</version>
+		</dependency>
+		<dependency>
+			<groupId>cz.vutbr.fit.burgetr</groupId>
+			<artifactId>layout</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
 
 	</dependencies>
