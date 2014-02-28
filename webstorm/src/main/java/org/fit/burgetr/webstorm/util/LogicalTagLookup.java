@@ -54,8 +54,8 @@ public class LogicalTagLookup
     {
         try
         {
-            //URL url = new URL("http://edition.cnn.com/2014/02/24/world/europe/ukraine-protests-up-to-speed/index.html?hpt=hp_t1");
-            URL url = new URL("http://edition.cnn.com");
+            URL url = new URL("http://edition.cnn.com/2014/02/24/world/europe/ukraine-protests-up-to-speed/index.html?hpt=hp_t1");
+            //URL url = new URL("http://edition.cnn.com");
             Segmentator segm = new Segmentator();
             segm.segmentURL(url);
             
@@ -77,7 +77,7 @@ public class LogicalTagLookup
                     System.out.print("    ");
                     while (pp != null)
                     {
-                        String pt = pp.getText();
+                        String pt = pp.getLeafText();
                         if (pt != null && !pt.isEmpty())
                             System.out.print(" / " + pt);
                         pp = pp.getParentNode();
