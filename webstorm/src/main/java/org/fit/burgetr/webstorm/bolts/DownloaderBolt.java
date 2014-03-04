@@ -5,21 +5,13 @@
  */
 package org.fit.burgetr.webstorm.bolts;
 
-import java.io.FileOutputStream;
-import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Map;
 
-import org.fit.cssbox.css.CSSNorm;
-import org.fit.cssbox.css.DOMAnalyzer;
-import org.fit.cssbox.css.NormalOutput;
-import org.fit.cssbox.css.Output;
-import org.fit.cssbox.io.DOMSource;
-import org.fit.cssbox.io.DefaultDOMSource;
-import org.fit.cssbox.io.DefaultDocumentSource;
-import org.fit.cssbox.io.DocumentSource;
+import org.fit.cssbox.demo.StyleImport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.Document;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -27,6 +19,7 @@ import backtype.storm.topology.IRichBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
+import backtype.storm.tuple.Values;
 
 /**
  * A bolt that downloads a HTML and the corresponding CSS files and completes a single file.
@@ -53,37 +46,18 @@ public class DownloaderBolt implements IRichBolt
     public void execute(Tuple input)
     {
         String urlstring = input.getString(0);
+        String title = input.getString(1);
         
         log.info("Downloading url: " + urlstring);
         
         try
         {
-            //Open the network connection 
-            DocumentSource docSource = new DefaultDocumentSource(urlstring);
-            
-            //Parse the input document
-            DOMSource parser = new DefaultDOMSource(docSource);
-            Document doc = parser.parse();
-            
-            //Create the CSS analyzer
-            DOMAnalyzer da = new DOMAnalyzer(doc, docSource.getURL());
-            da.attributesToStyles(); //convert the HTML presentation attributes to inline styles
-            da.addStyleSheet(null, CSSNorm.stdStyleSheet(), DOMAnalyzer.Origin.AGENT); //use the standard style sheet
-            da.addStyleSheet(null, CSSNorm.userStyleSheet(), DOMAnalyzer.Origin.AGENT); //use the additional style sheet
-            da.getStyleSheets(); //load the author style sheets
-            
-            //Compute the styles
-            log.debug("Computing style...");
-            da.stylesToDomInherited();
-            
-            //Save the output
-            PrintStream os = new PrintStream(new FileOutputStream("??")); //TODO string writer?
-            Output out = new NormalOutput(doc);
-            out.dumpTo(os);
+            StyleImport si = new StyleImport(urlstring);
+            StringWriter os = new StringWriter();
+            si.dumpTo(new PrintWriter(os));
             os.close();
             
-            docSource.close();
-            
+            collector.emit(new Values(title, urlstring, os.toString()));
             collector.ack(input);
         } 
         catch (Exception e)
