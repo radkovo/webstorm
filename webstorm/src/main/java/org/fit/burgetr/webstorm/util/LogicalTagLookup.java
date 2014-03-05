@@ -9,6 +9,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.Vector;
 
 import org.burgetr.segm.LogicalNode;
@@ -48,6 +52,60 @@ public class LogicalTagLookup
             recursiveLookupTag(root.getChildNode(i), tag, result);
     }
 
+    protected Vector<String> findRelatedText(LogicalNode node)
+    {
+        Vector<String> ret = new Vector<String>();
+        LogicalNode pp = node.getParentNode();
+        while (pp != null)
+        {
+            String pt = pp.getLeafText();
+            if (pt != null && !pt.isEmpty())
+                ret.add(pt);
+            pp = pp.getParentNode();
+        }
+        return ret;
+    }
+    
+    public Map<String, Vector<LogicalNode>> findRelatedNodes(Tagger tagger)
+    {
+        Map<String, Vector<LogicalNode>> ret = new HashMap<String, Vector<LogicalNode>>();
+        
+        Vector<LogicalNode> rel = lookupTag(tagger.getTag());
+        for (LogicalNode node : rel)
+        {
+            String text = node.getText();
+            Vector<String> allNames = tagger.extract(text);
+            
+            //extract surnames, unify
+            Set<String> names = new HashSet<String>();
+            for (String name : names)
+            {
+                String[] parts = name.toLowerCase().split("\\s+");
+                if (parts.length > 0)
+                    names.add(parts[parts.length - 1]); //take last names only
+            }
+            
+            
+            LogicalNode pp = node.getParentNode();
+            if (pp != null)
+            {
+                System.out.print("    ");
+                while (pp != null)
+                {
+                    String pt = pp.getLeafText();
+                    if (pt != null && !pt.isEmpty())
+                        System.out.print(" / " + pt);
+                    pp = pp.getParentNode();
+                }
+                System.out.println();
+            }
+            
+        }
+
+        
+        return ret;
+    }
+    
     //=====================================================================================================
 
     public static void main(String[] args)
