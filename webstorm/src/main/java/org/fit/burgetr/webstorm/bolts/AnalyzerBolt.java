@@ -5,18 +5,18 @@
  */
 package org.fit.burgetr.webstorm.bolts;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.List;
 import java.util.Map;
-
-import com.hp.hpl.jena.rdf.model.Model;
-import com.hp.hpl.jena.rdf.model.Property;
-import com.hp.hpl.jena.rdf.model.RDFNode;
-import com.hp.hpl.jena.rdf.model.Resource;
-import com.hp.hpl.jena.rdf.model.Statement;
-import com.hp.hpl.jena.rdf.model.StmtIterator;
+import java.util.Set;
 
 import org.burgetr.segm.Segmentator;
-import org.fit.burgetr.webstorm.util.RDFProducer;
+import org.burgetr.segm.tagging.taggers.PersonsTagger;
+import org.burgetr.segm.tagging.taggers.Tagger;
+import org.fit.burgetr.webstorm.util.LogicalTagLookup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,31 +50,33 @@ public class AnalyzerBolt implements IRichBolt
 
     public void execute(Tuple input)
     {
-        String urlstring = input.getString(0);
-        Model model = processUrl(urlstring);
-        if (model != null)
+        String baseurl = input.getString(1);
+        String html = input.getString(2);
+        
+        Map<String, Set<String>> keywords;
+        try
         {
-            StmtIterator iter = model.listStatements();
-            while (iter.hasNext())
+            keywords = processUrl(html, new URL(baseurl));
+            if (keywords != null)
             {
-                Statement stmt      = iter.nextStatement();  // get next statement
-                Resource  subject   = stmt.getSubject();     // get the subject
-                Property  predicate = stmt.getPredicate();   // get the predicate
-                RDFNode   object    = stmt.getObject();      // get the object
-                String objstring;
-                if (object instanceof Resource) {
-                    objstring = object.toString();
-                 } else {
-                     // object is a literal
-                     objstring = "\"" + object.toString() + "\"";
-                 }
-                
-                collector.emit(new Values(subject.toString(), predicate.toString(), objstring));
-                log.info("emit (" + subject.toString() + " : " + predicate.toString() + " : " + objstring + ")");
-            } 
+                for (Map.Entry<String, Set<String>> entry : keywords.entrySet())
+                {
+                    String name = entry.getKey();
+                    for (String keyword : entry.getValue())
+                    {
+                        if (!keyword.equals(name))
+                            collector.emit(new Values(name, keyword, baseurl));
+                    }
+                }
+                collector.ack(input);
+            }
+            else
+                collector.fail(input);
         }
-        collector.ack(input);
-        log.info("Processed: " + urlstring);
+        catch (MalformedURLException e)
+        {
+            collector.fail(input);
+        }
     }
 
     public void cleanup()
@@ -93,16 +95,21 @@ public class AnalyzerBolt implements IRichBolt
     
     //===========================================================================================
     
-    private Model processUrl(String urlstring)
+    private Map<String, Set<String>> processUrl(String html, URL baseurl)
     {
         try
         {
-            URL url = new URL(urlstring);
+            InputStream is = new ByteArrayInputStream(html.getBytes("UTF-8"));
             Segmentator segm = new Segmentator();
-            segm.segmentURL(url);
+            segm.segmentInputStream(is, baseurl);
             
-            RDFProducer rdf = new RDFProducer(segm.getBoxTree(), segm.getAreaTree(), url);
-            return rdf.getModel();
+            Tagger p = new PersonsTagger(1);
+            LogicalTagLookup lookup = new LogicalTagLookup(segm.getLogicalTree());
+            Map<String, List<String>> related = lookup.findRelatedText(p);
+            Map<String, Set<String>> keywords = lookup.extractRelatedKeywords(related);
+            
+            return keywords;
+            
         } catch (Exception e)
         {
             //e.printStackTrace();
