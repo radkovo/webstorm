@@ -11,7 +11,10 @@ import backtype.storm.topology.TopologyBuilder;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.util.StatusPrinter;
 
+import org.fit.burgetr.webstorm.bolts.AnalyzerBolt;
+import org.fit.burgetr.webstorm.bolts.DownloaderBolt;
 import org.fit.burgetr.webstorm.bolts.FeedReaderBolt;
+import org.fit.burgetr.webstorm.bolts.NKStoreBolt;
 import org.fit.burgetr.webstorm.spouts.FeedURLSpout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,15 +34,21 @@ public class RssMonitorTopology
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         StatusPrinter.print(lc);
         
+        //create spouts and bolt
+        FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt");
+        FeedReaderBolt reader = new FeedReaderBolt();
+        DownloaderBolt downloader = new DownloaderBolt();
+        AnalyzerBolt analyzer = new AnalyzerBolt();
+        NKStoreBolt nkstore = new NKStoreBolt();
         
+        //create the topology
         TopologyBuilder builder = new TopologyBuilder();
 
-        FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt");
-        FeedReaderBolt readerBolt = new FeedReaderBolt(); 
-        
-        // spout with 5 parallel instances
         builder.setSpout("url_spout", urlSpout, 5);
-        builder.setBolt("reader_bolt", readerBolt).shuffleGrouping("url_spout");
+        builder.setBolt("reader", reader).shuffleGrouping("url_spout");
+        builder.setBolt("downloader", downloader, 1).shuffleGrouping("reader");
+        builder.setBolt("analyzer", analyzer, 1).shuffleGrouping("downloader");
+        builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer");
 
         Config conf = new Config();
         conf.setDebug(true);
