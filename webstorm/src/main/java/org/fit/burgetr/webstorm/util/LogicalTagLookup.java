@@ -6,14 +6,15 @@
 package org.fit.burgetr.webstorm.util;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
+import java.util.regex.Pattern;
 
 import org.burgetr.segm.LogicalNode;
 import org.burgetr.segm.LogicalTree;
@@ -29,21 +30,36 @@ import org.xml.sax.SAXException;
  */
 public class LogicalTagLookup
 {
+    protected Pattern wordExpr = Pattern.compile("[A-Za-z]+");
     protected LogicalTree ltree;
     
-    
+    /**
+     * Creates a lookup on a logical tree. 
+     * @param ltree the logical tree to be used.
+     */
     public LogicalTagLookup(LogicalTree ltree)
     {
         this.ltree = ltree;
     }
     
-    public Vector<LogicalNode> lookupTag(Tag tag)
+    /**
+     * Finds all logical nodes that correspond to the given tag.
+     * @param tag The tag to be found
+     * @return List of corresponding logical nodes
+     */
+    public List<LogicalNode> lookupTag(Tag tag)
     {
         Vector<LogicalNode> ret = new Vector<LogicalNode>();
         recursiveLookupTag(ltree.getRoot(), tag, ret);
         return ret;
     }
 
+    /**
+     * Recursively finds all logical nodes that correspond to the given tag starting with the given root node.
+     * @param root The root node
+     * @param tag The tag to be found
+     * @param result List of corresponding logical nodes
+     */
     protected void recursiveLookupTag(LogicalNode root, Tag tag, Vector<LogicalNode> result)
     {
         if (root.hasTag(tag))
@@ -52,9 +68,89 @@ public class LogicalTagLookup
             recursiveLookupTag(root.getChildNode(i), tag, result);
     }
 
-    protected Vector<String> findRelatedText(LogicalNode node)
+    /**
+     * Finds all the name - related string relationships in the document
+     * @param tagger The name tagger to be used for recoginizing the names
+     * @return A map assigning strings to surnames
+     */
+    public Map<String, List<String>> findRelatedText(Tagger tagger)
+    {
+        Map<String, List<String>> ret = new HashMap<String, List<String>>();
+        
+        List<LogicalNode> rel = lookupTag(tagger.getTag());
+        for (LogicalNode node : rel)
+        {
+            String text = node.getText();
+            Set<String> names = extractSurnames(text, tagger);
+            List<String> related = findRelatedTextForNode(node);
+            for (String name : names)
+            {
+                List<String> nameStrings = ret.get(name);
+                if (nameStrings == null)
+                    ret.put(name, related);
+                else
+                    nameStrings.addAll(related);
+            }
+        }
+        
+        return ret;
+    }
+    
+    /**
+     * Goes through the name - text string relationships and transforms them to name - keywords relationships
+     * @param related 
+     * @return
+     */
+    public Map<String, Set<String>> extractRelatedKeywords(Map<String, List<String>> related)
+    {
+        Map<String, Set<String>> ret = new HashMap<String, Set<String>>();
+
+        for (Map.Entry<String, List<String>> entry : related.entrySet())
+        {
+            Set<String> nameWords = new HashSet<String>();
+            for (String text : entry.getValue())
+                nameWords.addAll(extractKeywords(text));
+            ret.put(entry.getKey(), nameWords);
+        }
+        
+        return ret;
+    }
+    
+    /**
+     * Extracts all last names from the given string using a tagger.
+     * @param text The text string to be processed (containing the names).
+     * @param tagger The tagger to be used for recognizing the names.
+     * @return A set of surnames found in the text.
+     */
+    protected Set<String> extractSurnames(String text, Tagger tagger)
+    {
+        Vector<String> allNames = tagger.extract(text);
+        
+        //extract surnames, unify
+        Set<String> names = new HashSet<String>();
+        for (String name : allNames)
+        {
+            String[] parts = name.toLowerCase().split("\\s+");
+            if (parts.length > 0)
+                names.add(parts[parts.length - 1]); //take last names only
+        }
+        
+        return names;
+    }
+    
+    /**
+     * Finds the related text string to the given logical node.
+     * @param node
+     * @return
+     */
+    protected List<String> findRelatedTextForNode(LogicalNode node)
     {
         Vector<String> ret = new Vector<String>();
+        
+        //Include the text of the node itself
+        ret.add(node.getText());
+        
+        //Include all the paren nodes
         LogicalNode pp = node.getParentNode();
         while (pp != null)
         {
@@ -66,49 +162,39 @@ public class LogicalTagLookup
         return ret;
     }
     
-    public Map<String, Vector<LogicalNode>> findRelatedNodes(Tagger tagger)
+    /**
+     * Obtains all the valid keywords from a string. Removes the stop words and words containing strange characters.
+     * @param text
+     * @return
+     */
+    protected Set<String> extractKeywords(String text)
     {
-        Map<String, Vector<LogicalNode>> ret = new HashMap<String, Vector<LogicalNode>>();
+        HashSet<String> ret = new HashSet<String>();
         
-        Vector<LogicalNode> rel = lookupTag(tagger.getTag());
-        for (LogicalNode node : rel)
+        String[] allWords = text.toLowerCase().split("\\s+");
+        for (String word : allWords)
         {
-            String text = node.getText();
-            Vector<String> allNames = tagger.extract(text);
-            
-            //extract surnames, unify
-            Set<String> names = new HashSet<String>();
-            for (String name : names)
-            {
-                String[] parts = name.toLowerCase().split("\\s+");
-                if (parts.length > 0)
-                    names.add(parts[parts.length - 1]); //take last names only
-            }
-            
-            
-            LogicalNode pp = node.getParentNode();
-            if (pp != null)
-            {
-                System.out.print("    ");
-                while (pp != null)
-                {
-                    String pt = pp.getLeafText();
-                    if (pt != null && !pt.isEmpty())
-                        System.out.print(" / " + pt);
-                    pp = pp.getParentNode();
-                }
-                System.out.println();
-            }
-            
+            if (isValidWord(word) && !StopList.contains(word))
+                ret.add(word);
         }
-
         
         return ret;
     }
     
+    protected boolean isValidWord(String s)
+    {
+        return s.length() > 1 && wordExpr.matcher(s).matches();
+    }
+    
     //=====================================================================================================
 
+    
     public static void main(String[] args)
+    {
+        test2(args);
+    }
+    
+    public static void test2(String[] args)
     {
         try
         {
@@ -120,7 +206,47 @@ public class LogicalTagLookup
             Tagger p = new PersonsTagger(1);
             
             LogicalTagLookup lookup = new LogicalTagLookup(segm.getLogicalTree());
-            Vector<LogicalNode> result = lookup.lookupTag(p.getTag());
+            
+            Map<String, List<String>> related = lookup.findRelatedText(p);
+            System.out.println("Related text:");
+            for (Map.Entry<String, List<String>> entry : related.entrySet())
+            {
+                System.out.println(entry.getKey() + " : " + entry.getValue());
+            }
+            
+            Map<String, Set<String>> keywords = lookup.extractRelatedKeywords(related);
+            System.out.println("Related keywords:");
+            for (Map.Entry<String, Set<String>> entry : keywords.entrySet())
+            {
+                System.out.println(entry.getKey() + " : " + entry.getValue());
+            }
+            
+        } catch (MalformedURLException e)
+        {
+            e.printStackTrace();
+        } catch (IOException e)
+        {
+            e.printStackTrace();
+        } catch (SAXException e)
+        {
+            e.printStackTrace();
+        }
+    
+    }
+    
+    public static void test1(String[] args)
+    {
+        try
+        {
+            URL url = new URL("http://edition.cnn.com/2014/02/24/world/europe/ukraine-protests-up-to-speed/index.html?hpt=hp_t1");
+            //URL url = new URL("http://edition.cnn.com");
+            Segmentator segm = new Segmentator();
+            segm.segmentURL(url);
+            
+            Tagger p = new PersonsTagger(1);
+            
+            LogicalTagLookup lookup = new LogicalTagLookup(segm.getLogicalTree());
+            List<LogicalNode> result = lookup.lookupTag(p.getTag());
             
             System.out.println("Found:");
             for (LogicalNode node : result)
