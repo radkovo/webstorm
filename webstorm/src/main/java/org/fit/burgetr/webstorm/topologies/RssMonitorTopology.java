@@ -29,7 +29,7 @@ public class RssMonitorTopology
     public static void main(String[] args)
     {
         //logging status
-        Logger logger = LoggerFactory.getLogger(WebRdfTopology.class);
+        Logger logger = LoggerFactory.getLogger(RssMonitorTopology.class);
         logger.debug("TOPOLOGY START");
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         StatusPrinter.print(lc);
