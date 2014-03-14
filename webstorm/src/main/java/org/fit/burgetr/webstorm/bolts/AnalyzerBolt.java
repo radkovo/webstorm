@@ -32,7 +32,7 @@ import backtype.storm.tuple.Values;
  * A bolt that analyzes a web page and emits the discovered name-keyword and name-image relationships.
  * Accepts: (title, base_url, html_code)
  * Emits: (name, keyword, base_url)+
- * 
+ *        (name, image_url, base_url)+
  * @author burgetr
  */
 public class AnalyzerBolt implements IRichBolt
@@ -53,19 +53,30 @@ public class AnalyzerBolt implements IRichBolt
         String baseurl = input.getString(1);
         String html = input.getString(2);
         
-        Map<String, Set<String>> keywords;
         try
         {
-            keywords = processUrl(html, new URL(baseurl));
-            if (keywords != null)
+            LogicalTagLookup lookup = processUrl(html, new URL(baseurl));
+            Map<String, Set<String>> keywords = extractKeywords(lookup);
+            Map<String, Set<URL>> images = extractImages(lookup);
+            if (keywords != null && images != null)
             {
+                //emit name-keyword tuples
                 for (Map.Entry<String, Set<String>> entry : keywords.entrySet())
                 {
                     String name = entry.getKey();
                     for (String keyword : entry.getValue())
                     {
                         if (!keyword.equals(name))
-                            collector.emit(new Values(name, keyword, baseurl));
+                            collector.emit("kw", new Values(name, keyword, baseurl));
+                    }
+                }
+                //emit name-image tuples
+                for (Map.Entry<String, Set<URL>> entry : images.entrySet())
+                {
+                    String name = entry.getKey();
+                    for (URL url : entry.getValue())
+                    {
+                        collector.emit("img", new Values(name, url, baseurl));
                     }
                 }
                 collector.ack(input);
@@ -85,7 +96,7 @@ public class AnalyzerBolt implements IRichBolt
 
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
-        declarer.declare(new Fields("subject", "predicate", "object"));
+        declarer.declare(new Fields("name", "contents", "baseurl"));
     }
 
     public Map<String, Object> getComponentConfiguration()
@@ -95,21 +106,15 @@ public class AnalyzerBolt implements IRichBolt
     
     //===========================================================================================
     
-    private Map<String, Set<String>> processUrl(String html, URL baseurl)
+    private LogicalTagLookup processUrl(String html, URL baseurl)
     {
         try
         {
             InputStream is = new ByteArrayInputStream(html.getBytes("UTF-8"));
             Segmentator segm = new Segmentator();
             segm.segmentInputStream(is, baseurl);
-            
-            Tagger p = new PersonsTagger(1);
             LogicalTagLookup lookup = new LogicalTagLookup(segm.getLogicalTree());
-            Map<String, List<String>> related = lookup.findRelatedText(p);
-            Map<String, Set<String>> keywords = lookup.extractRelatedKeywords(related);
-            
-            return keywords;
-            
+            return lookup;
         } catch (Exception e)
         {
             //e.printStackTrace();
@@ -118,4 +123,18 @@ public class AnalyzerBolt implements IRichBolt
         }
     }
 
+    private Map<String, Set<String>> extractKeywords(LogicalTagLookup lookup)
+    {
+        Tagger p = new PersonsTagger(1);
+        Map<String, List<String>> related = lookup.findRelatedText(p);
+        Map<String, Set<String>> keywords = lookup.extractRelatedKeywords(related);
+        return keywords;
+    }
+    
+    private Map<String, Set<URL>> extractImages(LogicalTagLookup lookup)
+    {
+        Tagger p = new PersonsTagger(1);
+        return lookup.extractRelatedImages(p);
+    }
+    
 }

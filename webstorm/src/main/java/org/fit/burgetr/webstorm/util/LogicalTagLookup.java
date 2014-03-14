@@ -16,12 +16,17 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.regex.Pattern;
 
+import org.burgetr.segm.AreaNode;
+import org.burgetr.segm.BoxNode;
 import org.burgetr.segm.LogicalNode;
 import org.burgetr.segm.LogicalTree;
 import org.burgetr.segm.Segmentator;
 import org.burgetr.segm.tagging.Tag;
 import org.burgetr.segm.tagging.taggers.PersonsTagger;
 import org.burgetr.segm.tagging.taggers.Tagger;
+import org.fit.cssbox.layout.ReplacedBox;
+import org.fit.cssbox.layout.ReplacedContent;
+import org.fit.cssbox.layout.ReplacedImage;
 import org.xml.sax.SAXException;
 
 /**
@@ -68,6 +73,10 @@ public class LogicalTagLookup
             recursiveLookupTag(root.getChildNode(i), tag, result);
     }
 
+    //=====================================================================================================
+    // Keyword extraction
+    //=====================================================================================================
+    
     /**
      * Finds all the name - related string relationships in the document
      * @param tagger The name tagger to be used for recoginizing the names
@@ -187,11 +196,165 @@ public class LogicalTagLookup
     }
     
     //=====================================================================================================
-
+    // Image extraction
+    //=====================================================================================================
+    
+    /**
+     * Finds an expected "container area" containing a logical node and all related images 
+     * @param node The logical node to start with
+     * @param expansionThreshold the maximal expansion that a parent may add to the right border
+     * @return the container area
+     */
+    protected AreaNode findContainerArea(LogicalNode node, int tx1, int tx2)
+    {
+        AreaNode ret = node.getFirstAreaNode();
+        if (ret.getParentArea() != null)
+        {
+            ret = ret.getParentArea();
+            //expand the area as long as it keeps the right edge (with certain threshold)
+            while (ret.getParentArea() != null)
+            {
+                AreaNode parent = ret.getParentArea();
+                if (parent.getX() >= ret.getX() - tx1
+                    && parent.getX2() <= ret.getX2() + tx2)
+                    ret = parent;
+                else
+                    break;
+            }
+        }
+        return ret;
+    }
+    
+    protected Set<URL> findImageUrls(AreaNode node)
+    {
+        Set<URL> ret = new HashSet<URL>();
+        recursiveFindUrls(node, ret);
+        return ret;
+    }
+    
+    private void recursiveFindUrls(AreaNode root, Set<URL> urls)
+    {
+        if (root.isLeaf())
+        {
+            for (BoxNode node : root.getArea().getBoxes())
+            {
+                if (node.getBox() instanceof ReplacedBox)
+                {
+                    ReplacedContent content = ((ReplacedBox) node.getBox()).getContentObj();
+                    if (content instanceof ReplacedImage)
+                    {
+                        urls.add(((ReplacedImage) content).getUrl());
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < root.getChildCount(); i++)
+                recursiveFindUrls(root.getChildArea(i), urls);
+        }       
+    }
+    
+    public Map<String, Set<URL>> extractRelatedImages(Tagger tagger)
+    {
+        Map<String, Set<URL>> ret = new HashMap<String, Set<URL>>();
+        List<LogicalNode> nameNodes = lookupTag(tagger.getTag());
+        
+        for (LogicalNode node : nameNodes)
+        {
+            Set<String> names = extractSurnames(node.getText(), tagger);
+            AreaNode container = findContainerArea(node, 100, 20);
+            Set<URL> urls = findImageUrls(container);
+            
+            for (String name : names)
+            {
+                Set<URL> nameset = ret.get(name);
+                if (nameset == null)
+                {
+                    nameset = new HashSet<URL>();
+                    ret.put(name, nameset);
+                }
+                nameset.addAll(urls);
+            }
+        }
+        
+        return ret;
+    }
+    
+    //=====================================================================================================
+    
     
     public static void main(String[] args)
     {
-        test2(args);
+        test4(args);
+    }
+    
+    public static void test4(String[] args)
+    {
+        try
+        {
+            URL url = new URL("http://edition.cnn.com/2014/02/24/world/europe/ukraine-protests-up-to-speed/index.html?hpt=hp_t1");
+            //URL url = new URL("http://edition.cnn.com");
+            Segmentator segm = new Segmentator();
+            segm.segmentURL(url);
+            
+            Tagger p = new PersonsTagger(1);
+            
+            LogicalTagLookup lookup = new LogicalTagLookup(segm.getLogicalTree());
+            Map<String, Set<URL>> urls = lookup.extractRelatedImages(p);
+            
+            System.out.println(urls);
+            
+        } catch (MalformedURLException e)
+        {
+            e.printStackTrace();
+        } catch (IOException e)
+        {
+            e.printStackTrace();
+        } catch (SAXException e)
+        {
+            e.printStackTrace();
+        }
+    
+    }
+    
+    public static void test3(String[] args)
+    {
+        try
+        {
+            URL url = new URL("http://edition.cnn.com/2014/02/24/world/europe/ukraine-protests-up-to-speed/index.html?hpt=hp_t1");
+            //URL url = new URL("http://edition.cnn.com");
+            Segmentator segm = new Segmentator();
+            segm.segmentURL(url);
+            
+            Tagger p = new PersonsTagger(1);
+            
+            LogicalTagLookup lookup = new LogicalTagLookup(segm.getLogicalTree());
+            List<LogicalNode> nameNodes = lookup.lookupTag(p.getTag());
+            
+            for (LogicalNode node : nameNodes)
+            {
+                System.out.println("Node:" + node);
+                Set<String> names = lookup.extractSurnames(node.getText(), p);
+                System.out.println("    Names:" + names);
+                AreaNode container = lookup.findContainerArea(node, 100, 20);
+                System.out.println("    Container:" + container);
+                Set<URL> urls = lookup.findImageUrls(container);
+                System.out.println("    Urls:" + urls);
+            }
+            
+            
+        } catch (MalformedURLException e)
+        {
+            e.printStackTrace();
+        } catch (IOException e)
+        {
+            e.printStackTrace();
+        } catch (SAXException e)
+        {
+            e.printStackTrace();
+        }
+    
     }
     
     public static void test2(String[] args)
