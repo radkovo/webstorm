@@ -39,8 +39,21 @@ public class AnalyzerBolt implements IRichBolt
 {
     private static final long serialVersionUID = 1L;
     private static final Logger log = LoggerFactory.getLogger(AnalyzerBolt.class);
-    private OutputCollector collector;
     
+    private OutputCollector collector;
+    private String kwStreamId;
+    private String imgStreamId;
+    
+    /**
+     * Creates a new AnalyzerBolt.
+     * @param kwStreamId the identifier of the name-keyword output stream
+     * @param imgStreamId the identifier of the name-image output stream 
+     */
+    public AnalyzerBolt(String kwStreamId, String imgStreamId)
+    {
+        this.kwStreamId = kwStreamId;
+        this.imgStreamId = imgStreamId;
+    }
 
     @SuppressWarnings("rawtypes")
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
@@ -67,7 +80,7 @@ public class AnalyzerBolt implements IRichBolt
                     for (String keyword : entry.getValue())
                     {
                         if (!keyword.equals(name))
-                            collector.emit("kw", new Values(name, keyword, baseurl));
+                            collector.emit(kwStreamId, new Values(name, keyword, baseurl));
                     }
                 }
                 //emit name-image tuples
@@ -76,7 +89,7 @@ public class AnalyzerBolt implements IRichBolt
                     String name = entry.getKey();
                     for (URL url : entry.getValue())
                     {
-                        collector.emit("img", new Values(name, url, baseurl));
+                        collector.emit(imgStreamId, new Values(name, url, baseurl));
                     }
                 }
                 collector.ack(input);
@@ -96,7 +109,8 @@ public class AnalyzerBolt implements IRichBolt
 
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
-        declarer.declare(new Fields("name", "contents", "baseurl"));
+        declarer.declareStream(kwStreamId, new Fields("name", "keyword", "baseurl"));
+        declarer.declareStream(imgStreamId, new Fields("name", "image_url", "baseurl"));
     }
 
     public Map<String, Object> getComponentConfiguration()

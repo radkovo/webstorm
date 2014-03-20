@@ -38,7 +38,7 @@ public class RssMonitorTopology
         FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt");
         FeedReaderBolt reader = new FeedReaderBolt();
         DownloaderBolt downloader = new DownloaderBolt();
-        AnalyzerBolt analyzer = new AnalyzerBolt();
+        AnalyzerBolt analyzer = new AnalyzerBolt("kw", "img");
         NKStoreBolt nkstore = new NKStoreBolt();
         
         //create the topology
@@ -48,7 +48,7 @@ public class RssMonitorTopology
         builder.setBolt("reader", reader).shuffleGrouping("url_spout");
         builder.setBolt("downloader", downloader, 1).shuffleGrouping("reader");
         builder.setBolt("analyzer", analyzer, 1).shuffleGrouping("downloader");
-        builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer");
+        builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer", "kw");
 
         Config conf = new Config();
         conf.setDebug(true);
