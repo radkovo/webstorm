@@ -35,11 +35,16 @@ public class NKStoreBolt implements IRichBolt
     private static final Logger log = LoggerFactory.getLogger(NKStoreBolt.class);
     
     private OutputCollector collector;
-    /*private PreparedStatement insert;
+    private PreparedStatement insert;
     private Connection db;
-    private long nextid = 0;*/
+    private long nextid = 0;
     
     public NKStoreBolt()
+    {
+    }
+
+    @SuppressWarnings("rawtypes")
+    public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
     {
         try
         {
@@ -51,11 +56,6 @@ public class NKStoreBolt implements IRichBolt
         {
             e.printStackTrace();
         }
-    }
-
-    @SuppressWarnings("rawtypes")
-    public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
-    {
         this.collector = collector;
     }
 
@@ -79,14 +79,14 @@ public class NKStoreBolt implements IRichBolt
 
     public void cleanup()
     {
-        /*try
+        try
         {
             db.close();
         } 
         catch (SQLException e)
         {
             e.printStackTrace();
-        }*/
+        }
     }
 
     public void declareOutputFields(OutputFieldsDeclarer declarer)
@@ -102,7 +102,7 @@ public class NKStoreBolt implements IRichBolt
  
     private void initDB() throws ClassNotFoundException, SQLException
     {
-        /*Class.forName("org.h2.Driver");
+        Class.forName("org.h2.Driver");
         db = DriverManager.getConnection("jdbc:h2:mem:mytest", "sa", "");
         //Connection con = DriverManager.getConnection("jdbc:h2:tcp://localhost/~/test",  "sa", "");
         
@@ -110,16 +110,16 @@ public class NKStoreBolt implements IRichBolt
         stat.execute("CREATE TABLE entries (id INTEGER, atime datetime, name VARCHAR(32), keyword VARCHAR(32), PRIMARY KEY (id))");
         
         //prepared statement
-        insert = db.prepareStatement("INSERT INTO entries (id, atime, name, keyword) VALUES (?,?,?,?)");*/
+        insert = db.prepareStatement("INSERT INTO entries (id, atime, name, keyword) VALUES (?,?,?,?)");
     }
     
     private void storeOccurence(String name, String keyword) throws SQLException
     {
-        /*insert.setLong(0, nextid++);
+        insert.setLong(0, nextid++);
         insert.setTimestamp(1, new Timestamp((new Date()).getTime()));
         insert.setString(2, name);
         insert.setString(3, keyword);
-        insert.execute();*/
+        insert.execute();
         log.debug("Stored " + name + ":" + keyword);
     }
     
