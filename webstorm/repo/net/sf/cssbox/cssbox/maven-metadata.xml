@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>net.sf.cssbox</groupId>
+  <artifactId>cssbox</artifactId>
+  <versioning>
+    <versions>
+      <version>4.6-SNAPSHOT</version>
+    </versions>
+    <lastUpdated>20140321123233</lastUpdated>
+  </versioning>
+</metadata>
