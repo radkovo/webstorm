@@ -59,7 +59,7 @@
 					</descriptorRefs>
 					<archive>
 						<manifest>
-							<mainClass>org.fit.burgetr.webstorm.topologies.WebRdfTopology</mainClass>
+							<mainClass>org.fit.burgetr.webstorm.topologies.RssMonitorTopology</mainClass>
 						</manifest>
 					</archive>
 					<finalName>webstorm</finalName>
