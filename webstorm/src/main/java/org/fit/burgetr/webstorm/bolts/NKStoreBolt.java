@@ -115,10 +115,10 @@ public class NKStoreBolt implements IRichBolt
     
     private void storeOccurence(String name, String keyword) throws SQLException
     {
-        insert.setLong(0, nextid++);
-        insert.setTimestamp(1, new Timestamp((new Date()).getTime()));
-        insert.setString(2, name);
-        insert.setString(3, keyword);
+        insert.setLong(1, nextid++);
+        insert.setTimestamp(2, new Timestamp((new Date()).getTime()));
+        insert.setString(3, name);
+        insert.setString(4, keyword);
         insert.execute();
         log.debug("Stored " + name + ":" + keyword);
     }
