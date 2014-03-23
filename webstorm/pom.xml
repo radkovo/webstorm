@@ -63,7 +63,7 @@
 						</manifest>
 					</archive>
 					<finalName>webstorm</finalName>
-					<appendAssemblyId>false</appendAssemblyId>
+					<appendAssemblyId>true</appendAssemblyId>
 				</configuration>
 			</plugin>
 		</plugins>
@@ -126,7 +126,7 @@
 		<dependency>
 			<groupId>cz.vutbr.fit.burgetr</groupId>
 			<artifactId>layout</artifactId>
-			<version>0.0.1-SNAPSHOT</version>
+			<version>0.0.2-SNAPSHOT</version>
 		</dependency>
 
 	</dependencies>
