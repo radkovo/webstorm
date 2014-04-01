@@ -96,7 +96,7 @@
 			<artifactId>storm</artifactId>
 			<version>0.9.0.1</version>
 			<!-- use 'provided' to keep storm out of the jar-with-dependencies -->
-			<!--  <scope>provided</scope>  -->
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>edu.stanford.nlp</groupId>
