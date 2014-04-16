@@ -8,7 +8,10 @@ package org.fit.burgetr.webstorm.bolts;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -63,44 +66,54 @@ public class AnalyzerBolt implements IRichBolt
 
     public void execute(Tuple input)
     {
-        String baseurl = input.getString(1);
-        String html = input.getString(2);
+	        String baseurl = input.getString(1);
+	        String html = input.getString(2);
+	        HashMap<String,byte[]> allImg = (HashMap<String, byte[]>) input.getValue(3);
+	        
+	        try
+	        {
+	            LogicalTagLookup lookup = processUrl(html, new URL(baseurl));
+	            Map<String, Set<String>> keywords = extractKeywords(lookup);
+	            Map<String, Set<URL>> images = extractImages(lookup);
+	            if (images!=null && keywords != null)
+	            {
+	                //emit name-keyword tuples
+	                for (Map.Entry<String, Set<String>> entry : keywords.entrySet())
+	                {
+	                    String name = entry.getKey();
+	                    for (String keyword : entry.getValue())
+	                    {
+	                        if (!keyword.equals(name))
+	                            collector.emit(kwStreamId, new Values(name, keyword, baseurl));
+	                    }
+	                }
+	                //emit name-image tuples
+	                
+	                for (Map.Entry<String, Set<URL>> entry : images.entrySet())
+	                {
+	                    String name = entry.getKey();
+	                    for (URL url : entry.getValue())
+	                    {
+	                    	URI uri = new URI(url.getProtocol(), url.getUserInfo(), url.getHost(), url.getPort(), url.getPath(), url.getQuery(), url.getRef());
+	                        String canonical = uri.toString();
+	                        byte[] image_data=allImg.get(canonical);
+	                        
+	                        if (image_data!=null)
+	                        	collector.emit(imgStreamId, new Values(name, url.toString(), image_data));
+	                    }
+	                }
+	                collector.ack(input);
+	            }
+	            else
+	                collector.fail(input);
+	        }
+	        catch (MalformedURLException e)
+	        {
+	            collector.fail(input);
+	        } catch (URISyntaxException e) {
+	        	collector.fail(input);
+			}
         
-        try
-        {
-            LogicalTagLookup lookup = processUrl(html, new URL(baseurl));
-            Map<String, Set<String>> keywords = extractKeywords(lookup);
-            Map<String, Set<URL>> images = extractImages(lookup);
-            if (keywords != null && images != null)
-            {
-                //emit name-keyword tuples
-                for (Map.Entry<String, Set<String>> entry : keywords.entrySet())
-                {
-                    String name = entry.getKey();
-                    for (String keyword : entry.getValue())
-                    {
-                        if (!keyword.equals(name))
-                            collector.emit(kwStreamId, new Values(name, keyword, baseurl));
-                    }
-                }
-                //emit name-image tuples
-                for (Map.Entry<String, Set<URL>> entry : images.entrySet())
-                {
-                    String name = entry.getKey();
-                    for (URL url : entry.getValue())
-                    {
-                        collector.emit(imgStreamId, new Values(name, url, baseurl));
-                    }
-                }
-                collector.ack(input);
-            }
-            else
-                collector.fail(input);
-        }
-        catch (MalformedURLException e)
-        {
-            collector.fail(input);
-        }
     }
 
     public void cleanup()
@@ -110,7 +123,7 @@ public class AnalyzerBolt implements IRichBolt
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
         declarer.declareStream(kwStreamId, new Fields("name", "keyword", "baseurl"));
-        declarer.declareStream(imgStreamId, new Fields("name", "image_url", "baseurl"));
+        declarer.declareStream(imgStreamId, new Fields("name", "image_url", "image_bytes"));
     }
 
     public Map<String, Object> getComponentConfiguration()

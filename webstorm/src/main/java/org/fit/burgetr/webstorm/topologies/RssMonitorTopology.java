@@ -13,7 +13,9 @@ import ch.qos.logback.core.util.StatusPrinter;
 
 import org.fit.burgetr.webstorm.bolts.AnalyzerBolt;
 import org.fit.burgetr.webstorm.bolts.DownloaderBolt;
+import org.fit.burgetr.webstorm.bolts.ExtractFeaturesBolt;
 import org.fit.burgetr.webstorm.bolts.FeedReaderBolt;
+import org.fit.burgetr.webstorm.bolts.IndexBolt;
 import org.fit.burgetr.webstorm.bolts.NKStoreBolt;
 import org.fit.burgetr.webstorm.spouts.FeedURLSpout;
 import org.slf4j.Logger;
@@ -38,8 +40,10 @@ public class RssMonitorTopology
         FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt");
         FeedReaderBolt reader = new FeedReaderBolt();
         DownloaderBolt downloader = new DownloaderBolt();
-        AnalyzerBolt analyzer = new AnalyzerBolt("kw", "img");
-        NKStoreBolt nkstore = new NKStoreBolt();
+        AnalyzerBolt analyzer = new AnalyzerBolt("kw","img");
+        ExtractFeaturesBolt extractor = new ExtractFeaturesBolt();
+        IndexBolt indexer=new IndexBolt();
+        //NKStoreBolt nkstore = new NKStoreBolt();
         
         //create the topology
         TopologyBuilder builder = new TopologyBuilder();
@@ -48,7 +52,9 @@ public class RssMonitorTopology
         builder.setBolt("reader", reader).shuffleGrouping("url_spout");
         builder.setBolt("downloader", downloader, 1).shuffleGrouping("reader");
         builder.setBolt("analyzer", analyzer, 1).shuffleGrouping("downloader");
-        builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer", "kw");
+        builder.setBolt("extractor", extractor,1).globalGrouping("analyzer", "img");
+        builder.setBolt("indexer", indexer,1).shuffleGrouping("extractor");
+        //builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer", "kw");
 
         Config conf = new Config();
         conf.setDebug(true);

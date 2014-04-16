@@ -70,6 +70,44 @@
 	</build>
 
 	<dependencies>
+	    <dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>1.7.2</version>
+		</dependency>
+	    <dependency>
+			<groupId>com.github.kzwang</groupId>
+			<artifactId>lire</artifactId>
+			<version>0.9.4-kzwang-beta1</version>
+		</dependency>
+		<dependency>
+            <artifactId>lucene-core</artifactId>
+            <groupId>org.apache.lucene</groupId>
+            <type>jar</type>
+            <version>4.2.0</version>
+        </dependency>
+        <dependency>
+            <artifactId>lucene-analyzers-common</artifactId>
+            <groupId>org.apache.lucene</groupId>
+            <type>jar</type>
+            <version>4.2.0</version>
+        </dependency>
+        <dependency>
+            <artifactId>lucene-queryparser</artifactId>
+            <groupId>org.apache.lucene</groupId>
+            <type>jar</type>
+            <version>4.2.0</version>
+        </dependency>
+        <dependency>
+			<groupId>com.sangupta</groupId>
+			<artifactId>jopensurf</artifactId>
+			<version>1.0.0</version>
+		</dependency>
+        <dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-math3</artifactId>
+			<version>3.0</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.jena</groupId>
 			<artifactId>jena-tdb</artifactId>
@@ -96,7 +134,7 @@
 			<artifactId>storm</artifactId>
 			<version>0.9.0.1</version>
 			<!-- use 'provided' to keep storm out of the jar-with-dependencies -->
-			<!--  <scope>provided</scope>  -->
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>edu.stanford.nlp</groupId>
@@ -133,6 +171,7 @@
 			<artifactId>layout</artifactId>
 			<version>0.0.2-SNAPSHOT</version>
 		</dependency>
+		
 
 	</dependencies>
 </project>
