@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import javax.imageio.ImageIO;
 
@@ -37,7 +38,7 @@ import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.NodeList;
-
+import org.joda.time.DateTime;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -59,7 +60,6 @@ public class DownloaderBolt implements IRichBolt
     private static final long serialVersionUID = 1L;
     private static final Logger log = LoggerFactory.getLogger(DownloaderBolt.class);
     private OutputCollector collector;
-    
 
     @SuppressWarnings("rawtypes")
     @Override
@@ -85,8 +85,10 @@ public class DownloaderBolt implements IRichBolt
     {
         String urlstring = input.getString(0);
         String title = input.getString(1);
-        
-        log.info("Downloading url: " + urlstring);
+        String uuid=UUID.randomUUID().toString();
+        DateTime now = DateTime.now();
+        String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
+        log.info("DateTime:"+dateString+", Downloading url: " + urlstring+" ("+uuid+")");
         
         try
         {
@@ -111,7 +113,7 @@ public class DownloaderBolt implements IRichBolt
                 allImg.put(canonical, downloadUrl(u));
             }
 
-            collector.emit(new Values(title, urlstring, document.html(), allImg));
+            collector.emit(new Values(title, urlstring, document.html(), allImg, uuid));
             collector.ack(input);
         } 
         catch (Exception e)
@@ -130,7 +132,7 @@ public class DownloaderBolt implements IRichBolt
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
-        declarer.declare(new Fields("title", "base_url", "html", "images"));
+        declarer.declare(new Fields("title", "base_url", "html", "images","uuid"));
 
     }
 

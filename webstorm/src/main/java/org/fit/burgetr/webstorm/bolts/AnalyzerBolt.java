@@ -20,6 +20,7 @@ import org.burgetr.segm.Segmentator;
 import org.burgetr.segm.tagging.taggers.PersonsTagger;
 import org.burgetr.segm.tagging.taggers.Tagger;
 import org.fit.burgetr.webstorm.util.LogicalTagLookup;
+import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,7 +70,10 @@ public class AnalyzerBolt implements IRichBolt
 	        String baseurl = input.getString(1);
 	        String html = input.getString(2);
 	        HashMap<String,byte[]> allImg = (HashMap<String, byte[]>) input.getValue(3);
-	        
+	        String uuid=input.getString(4);
+	        DateTime now = DateTime.now();
+	        String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
+	        log.info("DateTime:"+dateString+", Analyzing url: " + baseurl+" ("+uuid+")");
 	        try
 	        {
 	            LogicalTagLookup lookup = processUrl(html, new URL(baseurl));
@@ -99,7 +103,7 @@ public class AnalyzerBolt implements IRichBolt
 	                        byte[] image_data=allImg.get(canonical);
 	                        
 	                        if (image_data!=null)
-	                        	collector.emit(imgStreamId, new Values(name, url.toString(), image_data));
+	                        	collector.emit(imgStreamId, new Values(name, url.toString(), image_data,uuid));
 	                    }
 	                }
 	                collector.ack(input);
@@ -123,7 +127,7 @@ public class AnalyzerBolt implements IRichBolt
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
         declarer.declareStream(kwStreamId, new Fields("name", "keyword", "baseurl"));
-        declarer.declareStream(imgStreamId, new Fields("name", "image_url", "image_bytes"));
+        declarer.declareStream(imgStreamId, new Fields("name", "image_url", "image_bytes","uuid"));
     }
 
     public Map<String, Object> getComponentConfiguration()

@@ -2,6 +2,7 @@ package org.fit.burgetr.webstorm.bolts;
 
 import java.util.Map;
 
+import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,7 +13,6 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
-
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -47,8 +47,11 @@ public class ExtractFeaturesBolt implements IRichBolt {
 	    	String name = input.getString(0);
 	        String image_url = input.getString(1);
 	        byte[] image_data=input.getBinary(2);
+	        String uuid=input.getString(3);
+	        DateTime now = DateTime.now();
+	        String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
+	        log.info("DateTime:"+dateString+", Extracting features of image from url: " + image_url+" (originating from document with uuid: "+uuid+")");
 
-	        log.info("Features: " + name +" "+image_url);
 	        /*
 	    	URL url = null;
 	    	BufferedImage image = null;
@@ -85,7 +88,7 @@ public class ExtractFeaturesBolt implements IRichBolt {
 			}
 	    	lireFeature.extract(image);
 	    	byte[] feature=lireFeature.getByteArrayRepresentation();
-	    	collector.emit(new Values(name,feature,image_data));
+	    	collector.emit(new Values(name,feature,image_data,uuid,image_url));
             collector.ack(input);
 	    	 
         }
@@ -98,7 +101,7 @@ public class ExtractFeaturesBolt implements IRichBolt {
 
 		@Override
 		public void declareOutputFields(OutputFieldsDeclarer declarer) {
-			declarer.declare(new Fields("name", "feature","image_data"));
+			declarer.declare(new Fields("name", "feature","image_data","uuid","image_url"));
 			
 		}
 

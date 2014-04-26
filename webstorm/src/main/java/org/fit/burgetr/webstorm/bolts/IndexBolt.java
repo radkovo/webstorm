@@ -13,6 +13,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
+import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,8 +57,12 @@ public class IndexBolt implements IRichBolt{
 		
 		String name = input.getString(0);
         byte[] feature = input.getBinary(1);
-        
-        log.info("Name: "+name+", feature: "+feature);
+        String image_url=input.getString(4);
+        String uuid=input.getString(3);
+        DateTime now = DateTime.now();
+        String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
+        log.info("DateTime:"+dateString+", Indexing image from url: " + image_url+" (originating from document with uuid: "+uuid+")");
+
         
         Document document = new Document();
         document.add(new Field(DocumentBuilder.FIELD_NAME_CEDD, feature));
