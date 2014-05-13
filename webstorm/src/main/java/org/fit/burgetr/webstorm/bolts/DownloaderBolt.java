@@ -14,9 +14,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.UnknownHostException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +33,7 @@ import org.burgetr.segm.Segmentator;
 import org.burgetr.segm.tagging.taggers.PersonsTagger;
 import org.burgetr.segm.tagging.taggers.Tagger;
 import org.fit.burgetr.webstorm.util.LogicalTagLookup;
+import org.fit.burgetr.webstorm.util.Monitoring;
 import org.fit.cssbox.demo.StyleImport;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -60,7 +64,17 @@ public class DownloaderBolt implements IRichBolt
     private static final long serialVersionUID = 1L;
     private static final Logger log = LoggerFactory.getLogger(DownloaderBolt.class);
     private OutputCollector collector;
-
+    private String webstormId;
+    private Monitoring monitor;
+    private String hostname;
+    
+    public DownloaderBolt(String uuid) throws SQLException, UnknownHostException{
+    	webstormId=uuid;
+    	monitor = new Monitoring(webstormId);
+    	hostname=InetAddress.getLocalHost().getHostName();
+    }
+    
+    
     @SuppressWarnings("rawtypes")
     @Override
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
@@ -85,7 +99,7 @@ public class DownloaderBolt implements IRichBolt
     {
         String urlstring = input.getString(0);
         String title = input.getString(1);
-        String uuid=UUID.randomUUID().toString();
+        String uuid = input.getString(2);
         DateTime now = DateTime.now();
         String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
         log.info("DateTime:"+dateString+", Downloading url: " + urlstring+" ("+uuid+")");
@@ -112,7 +126,7 @@ public class DownloaderBolt implements IRichBolt
                 String canonical = uri.toString();
                 allImg.put(canonical, downloadUrl(u));
             }
-
+            monitor.MonitorTuple("DownloaderBolt", uuid, hostname);
             collector.emit(new Values(title, urlstring, document.html(), allImg, uuid));
             collector.ack(input);
         } 

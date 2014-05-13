@@ -5,7 +5,10 @@
  */
 package org.fit.burgetr.webstorm.bolts;
 
+import java.net.InetAddress;
 import java.net.URL;
+import java.net.UnknownHostException;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +16,7 @@ import java.util.Map;
 import com.sun.syndication.feed.synd.SyndEntry;
 import com.sun.syndication.feed.synd.SyndFeed;
 
+import org.fit.burgetr.webstorm.util.Monitoring;
 import org.rometools.fetcher.FeedFetcher;
 import org.rometools.fetcher.impl.HttpURLFeedFetcher;
 import org.slf4j.Logger;
@@ -38,7 +42,16 @@ public class FeedReaderBolt implements IRichBolt
     private static final long serialVersionUID = 1L;
     private static final Logger log = LoggerFactory.getLogger(FeedReaderBolt.class);
     private OutputCollector collector;
+    private String webstormId;
+    private Monitoring monitor;
+    private String hostname;
     
+    
+    public FeedReaderBolt(String uuid) throws SQLException, UnknownHostException{
+    	webstormId=uuid;
+    	monitor=new Monitoring(webstormId);
+    	hostname=InetAddress.getLocalHost().getHostName();
+    }
 
     @SuppressWarnings("rawtypes")
     @Override
@@ -52,6 +65,7 @@ public class FeedReaderBolt implements IRichBolt
     {
         String urlstring = input.getString(0);
         Date date = new Date(input.getLong(1));
+        String uuid=input.getString(2);
         
         log.info("Processing url: " + urlstring + " last modified on " + date);
         
@@ -69,7 +83,8 @@ public class FeedReaderBolt implements IRichBolt
                     if (date.compareTo(entry.getPublishedDate()) <= 0)
                     {
                         log.info("New entry: " + entry.getTitle() + " " + entry.getUri() + " " + entry.getPublishedDate());
-                        collector.emit(new Values(entry.getUri(), entry.getTitle()));
+                        monitor.MonitorTuple("ExtractFeaturesBolt", uuid, hostname);
+                        collector.emit(new Values(entry.getUri(), entry.getTitle(),uuid));
                     }
                 }
             }
@@ -92,7 +107,7 @@ public class FeedReaderBolt implements IRichBolt
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
-        declarer.declare(new Fields("url", "title"));
+        declarer.declare(new Fields("url", "title","uuid"));
     }
 
     @Override

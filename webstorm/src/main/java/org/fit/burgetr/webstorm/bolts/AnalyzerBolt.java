@@ -7,10 +7,13 @@ package org.fit.burgetr.webstorm.bolts;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.UnknownHostException;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +23,7 @@ import org.burgetr.segm.Segmentator;
 import org.burgetr.segm.tagging.taggers.PersonsTagger;
 import org.burgetr.segm.tagging.taggers.Tagger;
 import org.fit.burgetr.webstorm.util.LogicalTagLookup;
+import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,19 +48,27 @@ public class AnalyzerBolt implements IRichBolt
     private static final long serialVersionUID = 1L;
     private static final Logger log = LoggerFactory.getLogger(AnalyzerBolt.class);
     
+    private String webstormId;
+    
     private OutputCollector collector;
     private String kwStreamId;
     private String imgStreamId;
-    
+    private Monitoring monitor;
+    private String hostname;
     /**
      * Creates a new AnalyzerBolt.
      * @param kwStreamId the identifier of the name-keyword output stream
      * @param imgStreamId the identifier of the name-image output stream 
+     * @throws SQLException 
+     * @throws UnknownHostException 
      */
-    public AnalyzerBolt(String kwStreamId, String imgStreamId)
+    public AnalyzerBolt(String kwStreamId, String imgStreamId,String uuid) throws SQLException, UnknownHostException
     {
         this.kwStreamId = kwStreamId;
         this.imgStreamId = imgStreamId;
+        webstormId=uuid;
+        monitor=new Monitoring(uuid);
+        hostname=InetAddress.getLocalHost().getHostName();
     }
 
     @SuppressWarnings("rawtypes")
@@ -87,8 +99,15 @@ public class AnalyzerBolt implements IRichBolt
 	                    String name = entry.getKey();
 	                    for (String keyword : entry.getValue())
 	                    {
-	                        if (!keyword.equals(name))
+	                        if (!keyword.equals(name)){
+	                        	try {
+									monitor.MonitorTuple("AnalyzerBolt", uuid, hostname);
+								} catch (SQLException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
 	                            collector.emit(kwStreamId, new Values(name, keyword, baseurl));
+	                        }
 	                    }
 	                }
 	                //emit name-image tuples
@@ -102,8 +121,15 @@ public class AnalyzerBolt implements IRichBolt
 	                        String canonical = uri.toString();
 	                        byte[] image_data=allImg.get(canonical);
 	                        
-	                        if (image_data!=null)
+	                        if (image_data!=null){
+	                        	try {
+									monitor.MonitorTuple("AnalyzerBolt", uuid, hostname);
+								} catch (SQLException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
 	                        	collector.emit(imgStreamId, new Values(name, url.toString(), image_data,uuid));
+	                        }
 	                    }
 	                }
 	                collector.ack(input);

@@ -7,13 +7,19 @@ package org.fit.burgetr.webstorm.spouts;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.UnknownHostException;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.UUID;
 import java.util.Map.Entry;
+
+import org.fit.burgetr.webstorm.util.Monitoring;
 
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -32,15 +38,20 @@ public class FeedURLSpout extends BaseRichSpout
 {
 
     private static final long serialVersionUID = 1L;
-
+    private String webstormId;
     private SpoutOutputCollector collector;
     private Map<String, Date> urls;
     private Iterator<Entry<String, Date>> urlIterator;
     private String listSourceUrl;
+    private Monitoring monitor;
+    private String hostname;
     
-    public FeedURLSpout(String listSourceUrl)
+    public FeedURLSpout(String listSourceUrl,String uuid) throws SQLException, UnknownHostException
     {
         this.listSourceUrl = listSourceUrl;
+        webstormId=uuid;
+        monitor=new Monitoring(webstormId);
+        hostname=InetAddress.getLocalHost().getHostName();
     }
     
     @SuppressWarnings("rawtypes")
@@ -67,7 +78,14 @@ public class FeedURLSpout extends BaseRichSpout
         }
         Entry<String, Date> entry = urlIterator.next();
         Date now = new Date();
-        collector.emit(new Values(entry.getKey(), entry.getValue().getTime()));
+        String uuid=UUID.randomUUID().toString();
+        try {
+			monitor.MonitorTuple("FeedUrlSpout", uuid, hostname);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        collector.emit(new Values(entry.getKey(), entry.getValue().getTime(),uuid));
         entry.setValue(now);
     }
 
@@ -84,7 +102,7 @@ public class FeedURLSpout extends BaseRichSpout
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
-        declarer.declare(new Fields("url", "lastfetch"));
+        declarer.declare(new Fields("url", "lastfetch","uuid"));
     }
 
     //===============================================================================================
@@ -115,5 +133,4 @@ public class FeedURLSpout extends BaseRichSpout
             e.printStackTrace();
         }
     }
-
 }

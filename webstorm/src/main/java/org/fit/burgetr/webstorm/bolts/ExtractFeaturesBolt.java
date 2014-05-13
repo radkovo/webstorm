@@ -1,7 +1,9 @@
 package org.fit.burgetr.webstorm.bolts;
 
+import java.sql.SQLException;
 import java.util.Map;
 
+import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,8 +22,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.UnknownHostException;
 
 import javax.imageio.ImageIO;
 
@@ -33,7 +37,17 @@ public class ExtractFeaturesBolt implements IRichBolt {
     private static final Logger log = LoggerFactory.getLogger(ExtractFeaturesBolt.class);
     private OutputCollector collector;
     public static final int MAX_IMAGE_DIMENSION = 1024;
+    private String webstormId;
+    private Monitoring monitor;
+    private String hostname;
 	
+    
+    	public ExtractFeaturesBolt(String uuid) throws SQLException, UnknownHostException{
+    		webstormId=uuid;
+    		monitor=new Monitoring(webstormId);
+    		hostname=InetAddress.getLocalHost().getHostName();
+    	}
+    
 	    @SuppressWarnings("rawtypes")
 	    @Override
 	    public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
@@ -88,6 +102,12 @@ public class ExtractFeaturesBolt implements IRichBolt {
 			}
 	    	lireFeature.extract(image);
 	    	byte[] feature=lireFeature.getByteArrayRepresentation();
+	    	try {
+				monitor.MonitorTuple("ExtractFeaturesBolt", uuid, hostname);
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 	    	collector.emit(new Values(name,feature,image_data,uuid,image_url));
             collector.ack(input);
 	    	 
@@ -110,4 +130,5 @@ public class ExtractFeaturesBolt implements IRichBolt {
 			// TODO Auto-generated method stub
 			return null;
 		}
+
 }

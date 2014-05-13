@@ -5,6 +5,10 @@
  */
 package org.fit.burgetr.webstorm.topologies;
 
+import java.net.UnknownHostException;
+import java.sql.SQLException;
+import java.util.UUID;
+
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.topology.TopologyBuilder;
@@ -28,7 +32,7 @@ import org.slf4j.LoggerFactory;
 public class RssMonitorTopology
 {
 
-    public static void main(String[] args)
+    public static void main(String[] args) throws SQLException, UnknownHostException
     {
         //logging status
         Logger logger = LoggerFactory.getLogger(RssMonitorTopology.class);
@@ -36,13 +40,16 @@ public class RssMonitorTopology
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         StatusPrinter.print(lc);
         
+        String uuid=UUID.randomUUID().toString();
+        
+        
         //create spouts and bolt
-        FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt");
-        FeedReaderBolt reader = new FeedReaderBolt();
-        DownloaderBolt downloader = new DownloaderBolt();
-        AnalyzerBolt analyzer = new AnalyzerBolt("kw","img");
-        ExtractFeaturesBolt extractor = new ExtractFeaturesBolt();
-        IndexBolt indexer=new IndexBolt();
+        FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt",uuid);
+        FeedReaderBolt reader = new FeedReaderBolt(uuid);
+        DownloaderBolt downloader = new DownloaderBolt(uuid);
+        AnalyzerBolt analyzer = new AnalyzerBolt("kw","img",uuid);
+        ExtractFeaturesBolt extractor = new ExtractFeaturesBolt(uuid);
+        IndexBolt indexer=new IndexBolt(uuid);
         //NKStoreBolt nkstore = new NKStoreBolt();
         
         //create the topology

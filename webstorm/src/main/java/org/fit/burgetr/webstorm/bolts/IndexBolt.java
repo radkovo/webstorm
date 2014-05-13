@@ -1,6 +1,9 @@
 package org.fit.burgetr.webstorm.bolts;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.sql.SQLException;
 import java.util.Map;
 
 import net.semanticmetadata.lire.DocumentBuilder;
@@ -13,6 +16,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
+import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +34,15 @@ public class IndexBolt implements IRichBolt{
     IndexWriterConfig conf=null;
     Directory directory=null;
     IndexWriter iw=null;
+    private String webstormId;
+    private Monitoring monitor;
+    private String hostname;
+    
+    public IndexBolt(String uuid) throws SQLException, UnknownHostException{
+    	webstormId=uuid;
+    	monitor=new Monitoring(uuid);
+    	hostname=InetAddress.getLocalHost().getHostName();
+    }
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context,
@@ -75,6 +88,13 @@ public class IndexBolt implements IRichBolt{
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+        
+        try {
+			monitor.MonitorTuple("IndexBolt", uuid, hostname);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	@Override
@@ -94,5 +114,6 @@ public class IndexBolt implements IRichBolt{
 		// TODO Auto-generated method stub
 		return null;
 	}
+
 
 }
