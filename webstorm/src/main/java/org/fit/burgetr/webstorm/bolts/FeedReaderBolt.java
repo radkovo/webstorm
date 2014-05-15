@@ -33,9 +33,9 @@ import backtype.storm.tuple.Values;
 /**
  * A bolt that decodes a feed at the given URL and extracts new entries
  * Accepts: (feed_url, time_of_last_fetch)
- * Emits: (extracted_url, title)+
+ * Emits: (extracted_url, title, tuple_uuid)+
  * 
- * @author burgetr
+ * @author burgetr and ikouril
  */
 public class FeedReaderBolt implements IRichBolt
 {
@@ -47,6 +47,12 @@ public class FeedReaderBolt implements IRichBolt
     private String hostname;
     
     
+    /**
+     * Creates a new FeedReaderBolt.
+     * @param uuid the identifier of actual deployment
+     * @throws SQLException 
+     * @throws UnknownHostException 
+     */
     public FeedReaderBolt(String uuid) throws SQLException, UnknownHostException{
     	webstormId=uuid;
     	monitor=new Monitoring(webstormId);

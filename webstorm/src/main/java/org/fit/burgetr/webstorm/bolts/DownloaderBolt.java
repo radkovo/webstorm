@@ -5,43 +5,23 @@
  */
 package org.fit.burgetr.webstorm.bolts;
 
-import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLConnection;
 import java.net.UnknownHostException;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-
-import javax.imageio.ImageIO;
-
-import org.burgetr.segm.Segmentator;
-import org.burgetr.segm.tagging.taggers.PersonsTagger;
-import org.burgetr.segm.tagging.taggers.Tagger;
-import org.fit.burgetr.webstorm.util.LogicalTagLookup;
 import org.fit.burgetr.webstorm.util.Monitoring;
-import org.fit.cssbox.demo.StyleImport;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.NodeList;
 import org.joda.time.DateTime;
 
 import backtype.storm.task.OutputCollector;
@@ -53,11 +33,11 @@ import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 
 /**
- * A bolt that downloads a HTML and the corresponding CSS files and completes a single file.
- * Accepts: (page_url, title)
- * Emits: (title, base_url, html_code)
+ * A bolt that downloads a HTML, the corresponding images
+ * Accepts: (page_url, title, tuple_uuid)
+ * Emits: (title, base_url, html_code, images, tuple_uuid)
  * 
- * @author burgetr
+ * @author burgetr and ikouril
  */
 public class DownloaderBolt implements IRichBolt
 {
@@ -68,6 +48,13 @@ public class DownloaderBolt implements IRichBolt
     private Monitoring monitor;
     private String hostname;
     
+    
+    /**
+     * Creates a new DownloaderBolt.
+     * @param uuid the identifier of actual deployment
+     * @throws SQLException 
+     * @throws UnknownHostException 
+     */
     public DownloaderBolt(String uuid) throws SQLException, UnknownHostException{
     	webstormId=uuid;
     	monitor = new Monitoring(webstormId);
@@ -82,6 +69,11 @@ public class DownloaderBolt implements IRichBolt
         this.collector = collector;
     } 
     
+    /**
+     * Downloads url to array of bytes
+     * @param toDownload the url of page to be downloaded
+     * @throws IOException 
+     */
     private byte[] downloadUrl(URL toDownload) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] chunk = new byte[4096];

@@ -30,9 +30,9 @@ import backtype.storm.tuple.Values;
 
 /**
  * A spouts that reads a list of feed urls and emits the urls repeatedly together with last fetch date.
- * Emits: (url, last_fetch_date[unix_time])
+ * Emits: (url, last_fetch_date[unix_time], tuple_uuid)
  * 
- * @author burgetr
+ * @author burgetr and ikouril
  */
 public class FeedURLSpout extends BaseRichSpout
 {
@@ -46,6 +46,12 @@ public class FeedURLSpout extends BaseRichSpout
     private Monitoring monitor;
     private String hostname;
     
+    /**
+     * Creates a new FeedUrlSpout
+     * @param uuid the identifier of actual deployment
+     * @throws SQLException 
+     * @throws UnknownHostException 
+     */
     public FeedURLSpout(String listSourceUrl,String uuid) throws SQLException, UnknownHostException
     {
         this.listSourceUrl = listSourceUrl;
@@ -107,6 +113,10 @@ public class FeedURLSpout extends BaseRichSpout
 
     //===============================================================================================
     
+    /**
+     * Loads urls from rss feed
+     * @param url string of rss feed
+     */
     private void loadList(String urlstring)
     {
         try {

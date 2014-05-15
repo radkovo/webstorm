@@ -38,10 +38,10 @@ import backtype.storm.tuple.Values;
 
 /**
  * A bolt that analyzes a web page and emits the discovered name-keyword and name-image relationships.
- * Accepts: (title, base_url, html_code)
+ * Accepts: (title, base_url, html_code, extracted_images, tuple_uuid )
  * Emits: (name, keyword, base_url)+
- *        (name, image_url, base_url)+
- * @author burgetr
+ *        (name, image_url, base_url, image_data, tuple_uuid)+
+ * @author burgetr and ikouril
  */
 public class AnalyzerBolt implements IRichBolt
 {
@@ -59,6 +59,7 @@ public class AnalyzerBolt implements IRichBolt
      * Creates a new AnalyzerBolt.
      * @param kwStreamId the identifier of the name-keyword output stream
      * @param imgStreamId the identifier of the name-image output stream 
+     * @param uuid the identifier of actual deployment
      * @throws SQLException 
      * @throws UnknownHostException 
      */
@@ -67,7 +68,7 @@ public class AnalyzerBolt implements IRichBolt
         this.kwStreamId = kwStreamId;
         this.imgStreamId = imgStreamId;
         webstormId=uuid;
-        monitor=new Monitoring(uuid);
+        monitor=new Monitoring(webstormId);
         hostname=InetAddress.getLocalHost().getHostName();
     }
 
@@ -81,7 +82,8 @@ public class AnalyzerBolt implements IRichBolt
     {
 	        String baseurl = input.getString(1);
 	        String html = input.getString(2);
-	        HashMap<String,byte[]> allImg = (HashMap<String, byte[]>) input.getValue(3);
+	        @SuppressWarnings("unchecked")
+			HashMap<String,byte[]> allImg = (HashMap<String, byte[]>) input.getValue(3);
 	        String uuid=input.getString(4);
 	        DateTime now = DateTime.now();
 	        String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
@@ -163,6 +165,12 @@ public class AnalyzerBolt implements IRichBolt
     
     //===========================================================================================
     
+    /**
+     * Processes url to extract tags
+     * @param html the incoming html page
+     * @param baseurl the url of incoming page
+     * @return LogicalTagLookup
+     */
     private LogicalTagLookup processUrl(String html, URL baseurl)
     {
         try
@@ -180,6 +188,11 @@ public class AnalyzerBolt implements IRichBolt
         }
     }
 
+    /**
+     * Extracts keywords from LogicalTagLookup
+     * @param lookup the LogicalTaglookup object
+     * @return the map of name and related keywords to them
+     */
     private Map<String, Set<String>> extractKeywords(LogicalTagLookup lookup)
     {
         Tagger p = new PersonsTagger(1);
@@ -188,6 +201,11 @@ public class AnalyzerBolt implements IRichBolt
         return keywords;
     }
     
+    /**
+     * Extracts image from LogicalTagLookup
+     * @param lookup the LogicalTaglookup object
+     * @return the map of name and related picture urls
+     */
     private Map<String, Set<URL>> extractImages(LogicalTagLookup lookup)
     {
         Tagger p = new PersonsTagger(1);
