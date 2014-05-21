@@ -68,10 +68,9 @@ public class DownloaderBolt implements IRichBolt
     private Monitoring monitor;
     private String hostname;
     
-    public DownloaderBolt(String uuid) throws SQLException, UnknownHostException{
+    public DownloaderBolt(String uuid) throws SQLException {
     	webstormId=uuid;
     	monitor = new Monitoring(webstormId);
-    	hostname=InetAddress.getLocalHost().getHostName();
     }
     
     
@@ -80,6 +79,14 @@ public class DownloaderBolt implements IRichBolt
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
     {
         this.collector = collector;
+        
+        // Set the correct hostname
+        try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
     } 
     
     private byte[] downloadUrl(URL toDownload) throws IOException {
@@ -97,6 +104,8 @@ public class DownloaderBolt implements IRichBolt
     @Override
     public void execute(Tuple input)
     {
+    	long startTime = System.nanoTime();
+    	
         String urlstring = input.getString(0);
         String title = input.getString(1);
         String uuid = input.getString(2);
@@ -126,7 +135,8 @@ public class DownloaderBolt implements IRichBolt
                 String canonical = uri.toString();
                 allImg.put(canonical, downloadUrl(u));
             }
-            monitor.MonitorTuple("DownloaderBolt", uuid, hostname);
+            Long estimatedTime = System.nanoTime() - startTime;
+            monitor.MonitorTuple("DownloaderBolt", uuid, hostname, estimatedTime);
             collector.emit(new Values(title, urlstring, document.html(), allImg, uuid));
             collector.ack(input);
         } 

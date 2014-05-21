@@ -62,24 +62,32 @@ public class AnalyzerBolt implements IRichBolt
      * @throws SQLException 
      * @throws UnknownHostException 
      */
-    public AnalyzerBolt(String kwStreamId, String imgStreamId,String uuid) throws SQLException, UnknownHostException
+    public AnalyzerBolt(String kwStreamId, String imgStreamId,String uuid) throws SQLException
     {
         this.kwStreamId = kwStreamId;
         this.imgStreamId = imgStreamId;
         webstormId=uuid;
         monitor=new Monitoring(uuid);
-        hostname=InetAddress.getLocalHost().getHostName();
     }
 
     @SuppressWarnings("rawtypes")
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
     {
         this.collector = collector;
+        
+        try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
     }
 
     public void execute(Tuple input)
     {
-	        String baseurl = input.getString(1);
+    	    long startTime = System.nanoTime();
+
+    		String baseurl = input.getString(1);
 	        String html = input.getString(2);
 	        HashMap<String,byte[]> allImg = (HashMap<String, byte[]>) input.getValue(3);
 	        String uuid=input.getString(4);
@@ -122,16 +130,19 @@ public class AnalyzerBolt implements IRichBolt
 	                        byte[] image_data=allImg.get(canonical);
 	                        
 	                        if (image_data!=null){
-	                        	try {
-									monitor.MonitorTuple("AnalyzerBolt", uuid, hostname);
-								} catch (SQLException e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
 	                        	collector.emit(imgStreamId, new Values(name, url.toString(), image_data,uuid));
 	                        }
 	                    }
 	                }
+	                
+	                Long estimatedTime = System.nanoTime() - startTime;
+	                try {
+	                	monitor.MonitorTuple("AnalyzerBolt", uuid, hostname, estimatedTime);
+	                } catch (SQLException e) {
+	                	// TODO Auto-generated catch block
+	                	e.printStackTrace();
+	                }
+	                
 	                collector.ack(input);
 	            }
 	            else

@@ -38,16 +38,22 @@ public class IndexBolt implements IRichBolt{
     private Monitoring monitor;
     private String hostname;
     
-    public IndexBolt(String uuid) throws SQLException, UnknownHostException{
+    public IndexBolt(String uuid) throws SQLException {
     	webstormId=uuid;
     	monitor=new Monitoring(uuid);
-    	hostname=InetAddress.getLocalHost().getHostName();
     }
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context,
 			OutputCollector collector) {
 		this.collector=collector;
+		try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
+		
 		if (conf==null){
 			conf = new IndexWriterConfig(LuceneUtils.LUCENE_VERSION,
 	                new WhitespaceAnalyzer(LuceneUtils.LUCENE_VERSION));
@@ -65,8 +71,9 @@ public class IndexBolt implements IRichBolt{
 	}
 
 	@Override
-	public void execute(Tuple input) {
-		
+	public void execute(Tuple input) 
+	{
+		long startTime = System.nanoTime();
 		
 		String name = input.getString(0);
         byte[] feature = input.getBinary(1);
@@ -90,7 +97,8 @@ public class IndexBolt implements IRichBolt{
 		}
         
         try {
-			monitor.MonitorTuple("IndexBolt", uuid, hostname);
+        	Long estimatedTime = System.nanoTime() - startTime;
+			monitor.MonitorTuple("IndexBolt", uuid, hostname, estimatedTime);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

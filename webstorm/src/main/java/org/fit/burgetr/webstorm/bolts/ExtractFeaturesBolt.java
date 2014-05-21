@@ -42,10 +42,9 @@ public class ExtractFeaturesBolt implements IRichBolt {
     private String hostname;
 	
     
-    	public ExtractFeaturesBolt(String uuid) throws SQLException, UnknownHostException{
+    	public ExtractFeaturesBolt(String uuid) throws SQLException {
     		webstormId=uuid;
     		monitor=new Monitoring(webstormId);
-    		hostname=InetAddress.getLocalHost().getHostName();
     	}
     
 	    @SuppressWarnings("rawtypes")
@@ -53,11 +52,20 @@ public class ExtractFeaturesBolt implements IRichBolt {
 	    public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
 	    {
 	        this.collector = collector;
+	        
+	        try{
+				hostname=InetAddress.getLocalHost().getHostName();
+			}
+			catch(UnknownHostException e){
+				hostname="-unknown-";
+			}
 	    }
 
 	    @Override
 	    public void execute(Tuple input)
 	    {
+	    	long startTime = System.nanoTime();
+	    	
 	    	String name = input.getString(0);
 	        String image_url = input.getString(1);
 	        byte[] image_data=input.getBinary(2);
@@ -103,7 +111,8 @@ public class ExtractFeaturesBolt implements IRichBolt {
 	    	lireFeature.extract(image);
 	    	byte[] feature=lireFeature.getByteArrayRepresentation();
 	    	try {
-				monitor.MonitorTuple("ExtractFeaturesBolt", uuid, hostname);
+	    		Long estimatedTime = System.nanoTime() - startTime;
+				monitor.MonitorTuple("ExtractFeaturesBolt", uuid, hostname, estimatedTime);
 			} catch (SQLException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();

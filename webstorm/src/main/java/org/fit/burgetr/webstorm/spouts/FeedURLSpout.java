@@ -46,12 +46,11 @@ public class FeedURLSpout extends BaseRichSpout
     private Monitoring monitor;
     private String hostname;
     
-    public FeedURLSpout(String listSourceUrl,String uuid) throws SQLException, UnknownHostException
+    public FeedURLSpout(String listSourceUrl,String uuid) throws SQLException
     {
         this.listSourceUrl = listSourceUrl;
         webstormId=uuid;
         monitor=new Monitoring(webstormId);
-        hostname=InetAddress.getLocalHost().getHostName();
     }
     
     @SuppressWarnings("rawtypes")
@@ -59,6 +58,15 @@ public class FeedURLSpout extends BaseRichSpout
     public void open(Map conf, TopologyContext context, SpoutOutputCollector collector)
     {
         this.collector = collector;
+        
+        // Set the correct hostname
+        try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
+        
         loadList(listSourceUrl);
     }
     
@@ -71,7 +79,7 @@ public class FeedURLSpout extends BaseRichSpout
             {
                 try
                 {
-                    Thread.sleep(2000); //wait 2 seconds in order not to repeat the whole list with the same times
+                    Thread.sleep(1000); //wait 1 second in order not to repeat the whole list with the same times
                 } catch (InterruptedException e) {}
             }
             urlIterator = urls.entrySet().iterator();

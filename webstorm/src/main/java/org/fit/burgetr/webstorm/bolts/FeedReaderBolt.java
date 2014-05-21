@@ -47,10 +47,9 @@ public class FeedReaderBolt implements IRichBolt
     private String hostname;
     
     
-    public FeedReaderBolt(String uuid) throws SQLException, UnknownHostException{
+    public FeedReaderBolt(String uuid) throws SQLException {
     	webstormId=uuid;
     	monitor=new Monitoring(webstormId);
-    	hostname=InetAddress.getLocalHost().getHostName();
     }
 
     @SuppressWarnings("rawtypes")
@@ -58,11 +57,19 @@ public class FeedReaderBolt implements IRichBolt
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
     {
         this.collector = collector;
+        try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
     }
 
     @Override
     public void execute(Tuple input)
     {
+    	long startTime = System.nanoTime();
+    	
         String urlstring = input.getString(0);
         Date date = new Date(input.getLong(1));
         String uuid=input.getString(2);
@@ -83,7 +90,8 @@ public class FeedReaderBolt implements IRichBolt
                     if (date.compareTo(entry.getPublishedDate()) <= 0)
                     {
                         log.info("New entry: " + entry.getTitle() + " " + entry.getUri() + " " + entry.getPublishedDate());
-                        monitor.MonitorTuple("ExtractFeaturesBolt", uuid, hostname);
+                        Long estimatedTime = System.nanoTime() - startTime;
+                        monitor.MonitorTuple("FeedReaderBolt", uuid, hostname, estimatedTime);
                         collector.emit(new Values(entry.getUri(), entry.getTitle(),uuid));
                     }
                 }
