@@ -20,7 +20,6 @@ import org.fit.burgetr.webstorm.bolts.DownloaderBolt;
 import org.fit.burgetr.webstorm.bolts.ExtractFeaturesBolt;
 import org.fit.burgetr.webstorm.bolts.FeedReaderBolt;
 import org.fit.burgetr.webstorm.bolts.IndexBolt;
-import org.fit.burgetr.webstorm.bolts.NKStoreBolt;
 import org.fit.burgetr.webstorm.spouts.FeedURLSpout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

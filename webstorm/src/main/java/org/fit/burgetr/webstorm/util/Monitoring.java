@@ -11,7 +11,10 @@ import java.lang.ClassNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * A class for monitoring bolt and spout outputs
+ * @author ikouril
+ */
 public class Monitoring implements Serializable{
 	/**
 	 * 
@@ -20,19 +23,23 @@ public class Monitoring implements Serializable{
 	private static final Logger log = LoggerFactory.getLogger(Monitoring.class);
 	//Connection conn;
 	String webstormId;
+	
+	/**
+     * Creates a new Monitoring object.
+     * @param uuid the identifier of actual deployment
+     * @throws SQLException 
+     */
 	public Monitoring(String uuid) throws SQLException{
-		
 		webstormId=uuid;
 	}
 	
 	/**
-	 * 
-	 * 
-	 * @param bolt_type
-	 * @param tuple_id
-	 * @param hostname
-	 * @param estimatedNanoS
-	 * @throws SQLException
+	 * Logs bolt or spout processing to database.
+     * @param bolt_type the type of bolt to be monitored
+     * @param tuple_id the uuid of tuple that was processed
+     * @param hostname the hostname of machine bolt or spout runs on
+     * @param estimatedNanoS Time estimated of bolt/spout operation...
+     * @throws SQLException
 	 */
 	public void MonitorTuple(String bolt_type, String tuple_id,String hostname, Long estimatedNanoS) throws SQLException 
 	{
@@ -47,6 +54,7 @@ public class Monitoring implements Serializable{
 		catch(ClassNotFoundException e){
 			log.info("Monitoring", "Connection not found... "+e.toString());
 		}
+
 		
 		String url = "jdbc:postgresql://knot28.fit.vutbr.cz/webstorm?user=webstorm&password=webstormdb88pass";
 		Connection conn=null;

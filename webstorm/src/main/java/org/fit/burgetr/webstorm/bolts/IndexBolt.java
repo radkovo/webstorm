@@ -27,25 +27,41 @@ import backtype.storm.topology.IRichBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Tuple;
 
+/**
+ * A bolt that indexes images
+ * Accepts: (name, feature,image_data,uuid,image_url)
+ * 
+ * @author ikouril
+ */
 public class IndexBolt implements IRichBolt{
 	private static final long serialVersionUID = 1L;
     private static final Logger log = LoggerFactory.getLogger(IndexBolt.class);
-    private OutputCollector collector;
     IndexWriterConfig conf=null;
     Directory directory=null;
     IndexWriter iw=null;
     private String webstormId;
     private Monitoring monitor;
     private String hostname;
+    private OutputCollector collector;
     
+
+    /**
+     * Creates a new IndexBolt.
+     * @param uuid the identifier of actual deployment
+     * @throws SQLException 
+     * @throws UnknownHostException 
+     */
     public IndexBolt(String uuid) throws SQLException {
     	webstormId=uuid;
-    	monitor=new Monitoring(uuid);
+    	monitor=new Monitoring(webstormId);
     }
 
+	@SuppressWarnings("rawtypes")
 	@Override
 	public void prepare(Map stormConf, TopologyContext context,
-			OutputCollector collector) {
+			OutputCollector collector) 
+	{
+
 		this.collector=collector;
 		try{
 			hostname=InetAddress.getLocalHost().getHostName();
@@ -70,6 +86,7 @@ public class IndexBolt implements IRichBolt{
 			}
 	}
 
+	@SuppressWarnings("deprecation")
 	@Override
 	public void execute(Tuple input) 
 	{
