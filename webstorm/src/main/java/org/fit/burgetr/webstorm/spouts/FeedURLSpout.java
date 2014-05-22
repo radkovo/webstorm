@@ -7,13 +7,19 @@ package org.fit.burgetr.webstorm.spouts;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.UnknownHostException;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.UUID;
 import java.util.Map.Entry;
+
+import org.fit.burgetr.webstorm.util.Monitoring;
 
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -24,23 +30,34 @@ import backtype.storm.tuple.Values;
 
 /**
  * A spouts that reads a list of feed urls and emits the urls repeatedly together with last fetch date.
- * Emits: (url, last_fetch_date[unix_time])
+ * Emits: (url, last_fetch_date[unix_time], tuple_uuid)
  * 
- * @author burgetr
+ * @author burgetr and ikouril
  */
 public class FeedURLSpout extends BaseRichSpout
 {
 
     private static final long serialVersionUID = 1L;
-
+    private String webstormId;
     private SpoutOutputCollector collector;
     private Map<String, Date> urls;
     private Iterator<Entry<String, Date>> urlIterator;
     private String listSourceUrl;
+    private Monitoring monitor;
+    private String hostname;
     
-    public FeedURLSpout(String listSourceUrl)
+
+    /**
+     * Creates a new FeedUrlSpout
+     * @param uuid the identifier of actual deployment
+     * @throws SQLException 
+     * @throws UnknownHostException 
+     */
+    public FeedURLSpout(String listSourceUrl,String uuid) throws SQLException
     {
         this.listSourceUrl = listSourceUrl;
+        webstormId=uuid;
+        monitor=new Monitoring(webstormId);
     }
     
     @SuppressWarnings("rawtypes")
@@ -48,6 +65,15 @@ public class FeedURLSpout extends BaseRichSpout
     public void open(Map conf, TopologyContext context, SpoutOutputCollector collector)
     {
         this.collector = collector;
+        
+        // Set the correct hostname
+        try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
+        
         loadList(listSourceUrl);
     }
     
@@ -60,14 +86,21 @@ public class FeedURLSpout extends BaseRichSpout
             {
                 try
                 {
-                    Thread.sleep(2000); //wait 2 seconds in order not to repeat the whole list with the same times
+                    Thread.sleep(1000); //wait 1 second in order not to repeat the whole list with the same times
                 } catch (InterruptedException e) {}
             }
             urlIterator = urls.entrySet().iterator();
         }
         Entry<String, Date> entry = urlIterator.next();
         Date now = new Date();
-        collector.emit(new Values(entry.getKey(), entry.getValue().getTime()));
+        String uuid=UUID.randomUUID().toString();
+        try {
+			monitor.MonitorTuple("FeedUrlSpout", uuid, hostname);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        collector.emit(new Values(entry.getKey(), entry.getValue().getTime(),uuid));
         entry.setValue(now);
     }
 
@@ -84,11 +117,15 @@ public class FeedURLSpout extends BaseRichSpout
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer)
     {
-        declarer.declare(new Fields("url", "lastfetch"));
+        declarer.declare(new Fields("url", "lastfetch","uuid"));
     }
 
     //===============================================================================================
     
+    /**
+     * Loads urls from rss feed
+     * @param url string of rss feed
+     */
     private void loadList(String urlstring)
     {
         try {
@@ -115,5 +152,4 @@ public class FeedURLSpout extends BaseRichSpout
             e.printStackTrace();
         }
     }
-
 }
