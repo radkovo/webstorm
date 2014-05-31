@@ -1,5 +1,7 @@
 package storm;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -24,10 +26,10 @@ import backtype.storm.scheduler.TopologyDetails;
 import backtype.storm.scheduler.WorkerSlot;
 
 public class ManualScheduler implements IScheduler {
-	// Next rescheduling times
-	private Map<TopologyDetails, Date> reschedulingForTopology = new HashMap<TopologyDetails, Date>();
-	// Analysers for topologies
-	private Map<TopologyDetails, Analyser> analysers = new HashMap<TopologyDetails, Analyser>();
+	// Next rescheduling times by topologies (topology ID)
+	private Map<String, Date> reschedulingForTopology = new HashMap<String, Date>();
+	// Analysers for topologies (topology ID)
+	private Map<String, Analyser> analysers = new HashMap<String, Analyser>();
 	
 	
 	public void prepare(Map config) {
@@ -52,25 +54,47 @@ public class ManualScheduler implements IScheduler {
         if (topology != null) {
         	
         	// Check or prepare Analyser
-        	if(!analysers.containsKey(topology)){
-        		analysers.put(topology, new Analyser(topology));
+        	if(!analysers.containsKey(topology.getId())){
+        		analysers.put(topology.getId(), new Analyser(topology));
         	}
         	
         	System.out.println("Assigned workers:" + cluster.getAssignedNumWorkers(topology));
-            boolean needsScheduling = cluster.needsScheduling(topology);
             
             // Configuration of topology
             Map conf = topology.getConf(); 
             
-            // Find the rescheduling interval
-            Long reschedulingInterval = (Long)conf.get("advisor.analysis.rescheduling");
+            System.out.println("Reschedules: " + reschedulingForTopology);
+            // Check if the rescheduling is needed, if so, unschedule topology
+            if(reschedulingForTopology.containsKey(topology.getId()) && new Date().after(reschedulingForTopology.get(topology.getId()))){
+            	// Find all slots from this topology
+            	// Assignment of this topology
+            	SchedulerAssignment assignment = cluster.getAssignments().get(topology.getId());
+            	// Map of executors to slots
+            	Map<ExecutorDetails, WorkerSlot> executorToSlot = assignment.getExecutorToSlot();
+            	
+            	Set<WorkerSlot> slotsToFree = new HashSet<WorkerSlot>(executorToSlot.values());
+            	
+            	System.out.println("Slots to free: " + slotsToFree.toString());
+            	
+            	// Free the slots used by this topology
+            	cluster.freeSlots(slotsToFree);
+            }
             
+            boolean needsScheduling = cluster.needsScheduling(topology);
+
             // Schedule if needed
             if (!needsScheduling) {
             	System.out.println("Websotrm topology DOES NOT NEED scheduling.");
             } else {
             	System.out.println("Webstorm topology needs scheduling.");
                 
+            	// Find the rescheduling interval and set next reschedule
+            	Long reschedulingInterval = (Long)conf.get("advisor.analysis.rescheduling");
+            	Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
+            	reschedulingForTopology.put(topology.getId(), nextReschedule);
+            	DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'");
+            	System.out.println("Next reschedule set to: " + nextReschedule.toString());
+            	
             	// Schedule executors to hosts where we don't have monitoring data
             	scheduleToNotObserved(cluster, topology);
             }
@@ -90,7 +114,7 @@ public class ManualScheduler implements IScheduler {
     	//Map<String, List<String>> measured = new HashMap<String, List<String>>();
     	//measured.put("knot04.fit.vutbr.cz", Arrays.asList("reader", "downloader"));
     	//measured.put("blade5.blades", Arrays.asList("extractor", "downloader", "analyzer"));
-    	Map<String, List<String>> measured = analysers.get(topology).getMeasuredHosts();
+    	Map<String, List<String>> measured = analysers.get(topology.getId()).getMeasuredHosts();
     	System.out.println("Measured: " + measured.toString());
     	
     	// Map of to be placed executor types per host
