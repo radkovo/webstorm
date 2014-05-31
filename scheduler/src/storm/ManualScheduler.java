@@ -3,11 +3,14 @@ package storm;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.SortedMap;
 
 import backtype.storm.scheduler.Cluster;
 import backtype.storm.scheduler.EvenScheduler;
@@ -39,135 +42,125 @@ public class ManualScheduler implements IScheduler {
             // Configuration of topology
             Map conf = topology.getConf(); 
 
-
             if (!needsScheduling) {
             	System.out.println("Our special topology DOES NOT NEED scheduling.");
             } else {
             	System.out.println("Our special topology needs scheduling.");
-                // find out all the needs-scheduling components of this topology
+                // Map of already measured executor types per host
+            	Map<String, List<String>> measured = new HashMap<String, List<String>>();
+            	measured.put("knot04.fit.vutbr.cz", Arrays.asList("reader", "downloader"));
+            	measured.put("blade5.blades", Arrays.asList("extractor", "downloader", "analyzer"));
+            	
+            	// Map of to be placed executor types per host
+            	Map<String, List<String>> execsToHost = new HashMap<String, List<String>>();
+            	
+            	// Map of to be placed executors per slot
+            	HashMap<WorkerSlot, List<ExecutorDetails>> toBePlaced = new HashMap<WorkerSlot, List<ExecutorDetails>>();
+            	
+            	
+            	// Find out all the needs-scheduling components of this topology
                 Map<String, List<ExecutorDetails>> componentToExecutors = cluster.getNeedsSchedulingComponentToExecutors(topology);
-                
-                /*
-                System.out.println("needs scheduling(component->executor): " + componentToExecutors);
-                System.out.println("needs scheduling(executor->compoenents): " + cluster.getNeedsSchedulingExecutorToComponents(topology));
-                SchedulerAssignment currentAssignment = cluster.getAssignmentById(topologies.getByName("Webstorm").getId());
-                if (currentAssignment != null) {
-                	System.out.println("current assignments: " + currentAssignment.getExecutorToSlot());
-                } else {
-                	System.out.println("current assignments: {}");
+                // Find total number of executors
+                int numExecutors = 0;
+                for(List<ExecutorDetails> l : componentToExecutors.values()){
+                	numExecutors += l.size();
                 }
-                */
                 
+                // Find all available slots
+                List<WorkerSlot> allAvailableSlots = cluster.getAvailableSlots();
                 
-                // Iterate Executors that need scheduling and check config for placement requirements
-                for (Entry<String, List<ExecutorDetails>> e : componentToExecutors.entrySet()){
-                	String confKey = "placement."+e.getKey();
-                	List<ExecutorDetails> executors = e.getValue();
+                // Count how many executors do we have to put to each slot
+                int executorRatio = Math.round(allAvailableSlots.size() / numExecutors);
+                executorRatio = executorRatio == 0 ? 1 : executorRatio;
+                
+                System.out.println("Executor ratio: " + new Integer(executorRatio).toString());
+                
+                // Iterate slots and prepare lists of executors for each slot
+                for (WorkerSlot slot : allAvailableSlots){
+                	// Host by nodeId
+                	String host = cluster.getSupervisorById(slot.getNodeId()).getHost();
+                	System.out.println("Host: "+host);
+                	for(int i = 0; i < executorRatio; i++){
+                		// Not needed executor types for this host
+                		HashSet<String> noNeedEexecTypes = new HashSet<String>();
+            			if(measured.size() > 0 && execsToHost.size() > 0){
+	                		noNeedEexecTypes.addAll(measured.get(host));
+	            			noNeedEexecTypes.addAll(execsToHost.get(host));
+            			}
+                		
+                		// Look for suitable executor
+                		for(String execType : componentToExecutors.keySet()){
+                			if(!noNeedEexecTypes.contains(execType) && componentToExecutors.get(execType).size() > 0){
+                				// Add executor type to unneeded
+                				if(execsToHost.containsKey(host)){
+                					execsToHost.get(host).add(execType);
+                				}
+                				// Add one executor of the type to this slot
+                				List<ExecutorDetails> slotsExecs = toBePlaced.get(slot);
+                				if(slotsExecs == null){
+                					slotsExecs = new LinkedList<ExecutorDetails>();
+                				}
+                				slotsExecs.add(componentToExecutors.get(execType).remove(0));
+                				toBePlaced.put(slot, slotsExecs);
+                				
+                				break;
+                			}
+                		}
+                	}
                 	
-                	System.out.println("Looking for config for executor: "+confKey);
+                }
+                
+                Map<String, SupervisorDetails> supervisors = cluster.getSupervisors();
+                // Schedule the rest of unscheduled executors - host after host
+                for(SupervisorDetails supervisor : supervisors.values()){
+                	List<WorkerSlot> slots = cluster.getAvailableSlots(supervisor);
                 	
-                	// Skip the executors without placement defined in configuration
-                	if(!conf.containsKey(confKey)){
+                	// Skip supervisor without slots
+                	if(slots.size() == 0){
                 		continue;
                 	}
                 	
-                	// Prepare set of required nodes from list in config
-                	Set<String> requiredNodes = new HashSet<String>(Arrays.asList(conf.get(confKey).toString().split(",[ ]*")));
+                	System.out.println("Supervisor for additional schedule: " + supervisor.getHost());
+                	System.out.println("Slots: " + slots.size());
                 	
-                	System.out.println("Hosts for executor '"+e.getKey()+"' :" + requiredNodes.toString());
-                	System.out.println("Executors to be placed:" + executors.toString());
-                	
-                	
-                	// Schedule to supervisors
-                	Collection<SupervisorDetails> supervisors = cluster.getSupervisors().values();
-                	//while(!requiredNodes.isEmpty() && !executors.isEmpty()){
-                		boolean hostsFound = false; // flag if there were any suitable hosts found
-	                	for (SupervisorDetails supervisor : supervisors) {
-	                		if(requiredNodes.contains(supervisor.getHost()) && !executors.isEmpty()){
-	                			List<WorkerSlot> availableSlots = cluster.getAvailableSlots(supervisor);
-	                			
-	                			// Skip this supervisor if there are no more slots
-	                			// at the same time we remove the node from list of requiredNodes
-	                			if(availableSlots.isEmpty()){
-	                				requiredNodes.remove(supervisor.getHost());
-	                				continue;
+                	// Find and schedule unscheduled executors
+	                for(List<ExecutorDetails> executors : componentToExecutors.values()){
+	                	if(executors.size() > 0){
+	                		// Find best slot on supervisor
+	                		WorkerSlot bestSlot = null;
+	                		Integer bestSlotExecutors = null;
+	                		for(WorkerSlot slot : slots){
+	                			int size = toBePlaced.get(slot).size();
+	                			if(bestSlotExecutors == null || size < bestSlotExecutors){
+	                				bestSlotExecutors = size;
+	                				bestSlot = slot;
 	                			}
-	                			
-	                			hostsFound = true;
-	                			
-	                			List<ExecutorDetails> toAssign = new ArrayList<ExecutorDetails>();
-	                			toAssign.add(executors.remove(0));
-	                			
-	                			// Assign one executor to current supervisor
-	                			cluster.assign(availableSlots.get(0), topology.getId(), executors);
-	                            System.out.println("We assigned executors:" + toAssign + 
-	                            		" to slot: [" + availableSlots.get(0).getNodeId() + ", " + availableSlots.get(0).getPort() + "]");
-	                            break;
 	                		}
+	                		// Assign new executor to slot
+            				List<ExecutorDetails> slotsExecs = toBePlaced.get(bestSlot);
+            				if(slotsExecs == null){
+            					slotsExecs = new LinkedList<ExecutorDetails>();
+            				}
+            				slotsExecs.add(executors.remove(0));
+            				toBePlaced.put(bestSlot, slotsExecs);
+            				break;
 	                	}
-	                	// exit the while if there were no suitable hosts found
-	                	if(!hostsFound){
-	                		System.out.println("No available hosts found.");
-	                		//break;
-	                	}
-                	//}
+	                }
                 }
                 
-                //*
-                if (!componentToExecutors.containsKey("special-spout")) {
-                	System.out.println("Our special-spout DOES NOT NEED scheduling.");
-                } else {
-                    System.out.println("Our special-spout needs scheduling.");
-                    List<ExecutorDetails> executors = componentToExecutors.get("special-spout");
-
-
-                    // find out the our "special-supervisor" from the supervisor metadata
-                    Collection<SupervisorDetails> supervisors = cluster.getSupervisors().values();
-                    SupervisorDetails specialSupervisor = null;
-                    for (SupervisorDetails supervisor : supervisors) {
-                        Map meta = (Map) supervisor.getSchedulerMeta();
-
-
-                        if (meta.get("name").equals("special-supervisor")) {
-                            specialSupervisor = supervisor;
-                            break;
-                        }
-                    }
-
-
-                    // found the special supervisor
-                    if (specialSupervisor != null) {
-                    	System.out.println("Found the special-supervisor");
-                        List<WorkerSlot> availableSlots = cluster.getAvailableSlots(specialSupervisor);
-                        
-                        // if there is no available slots on this supervisor, free some.
-                        // TODO for simplicity, we free all the used slots on the supervisor.
-                        if (availableSlots.isEmpty() && !executors.isEmpty()) {
-                            for (Integer port : cluster.getUsedPorts(specialSupervisor)) {
-                                cluster.freeSlot(new WorkerSlot(specialSupervisor.getId(), port));
-                            }
-                        }
-
-
-                        // re-get the aviableSlots
-                        availableSlots = cluster.getAvailableSlots(specialSupervisor);
-
-
-                        // since it is just a demo, to keep things simple, we assign all the
-                        // executors into one slot.
-                        cluster.assign(availableSlots.get(0), topology.getId(), executors);
-                        System.out.println("We assigned executors:" + executors + " to slot: [" + availableSlots.get(0).getNodeId() + ", " + availableSlots.get(0).getPort() + "]");
-                    } else {
-                    	System.out.println("There is no supervisor named special-supervisor!!!");
-                    }
+                // Schedule prepared executors to slots
+                for(Entry<WorkerSlot, List<ExecutorDetails>> e : toBePlaced.entrySet()){
+                	WorkerSlot slot = e.getKey();
+                	if(!cluster.isSlotOccupied(slot)) // Just as a last check. If the slot is occupied, scheduling is left to standard scheduler
+                		cluster.assign(slot, topology.getId(), e.getValue());
                 }
-                //*/
+                
+                System.out.print("Placed:\n" + toBePlaced.toString() + "\n");
             }
         }
         
-        // let system's even scheduler handle the rest scheduling work
-        // you can also use your own other scheduler here, this is what
-        // makes storm's scheduler composable.
+        // Let system's even scheduler handle the rest scheduling work
+        // you can also use your own other scheduler here.
         System.out.println("EvenScheduler fired...");
         new EvenScheduler().schedule(topologies, cluster);
 
