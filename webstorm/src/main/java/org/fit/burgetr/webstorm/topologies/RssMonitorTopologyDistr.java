@@ -60,12 +60,12 @@ public class RssMonitorTopologyDistr
         //create the topology
         TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout("url_spout", urlSpout, 4);
-        builder.setBolt("reader", reader, 1).shuffleGrouping("url_spout");
-        builder.setBolt("downloader", downloader, 4).shuffleGrouping("reader");
-        builder.setBolt("analyzer", analyzer, 3).shuffleGrouping("downloader");
-        builder.setBolt("extractor", extractor, 1).globalGrouping("analyzer", "img");
-        builder.setBolt("indexer", indexer,1).shuffleGrouping("extractor");
+        builder.setSpout("FeedUrlSpout", urlSpout, 4);
+        builder.setBolt("FeedReaderBolt", reader, 1).shuffleGrouping("FeedUrlSpout");
+        builder.setBolt("DownloaderBolt", downloader, 4).shuffleGrouping("FeedReaderBolt");
+        builder.setBolt("AnalyzerBolt", analyzer, 3).shuffleGrouping("DownloaderBolt");
+        builder.setBolt("ExtractFeaturesBolt", extractor, 1).globalGrouping("AnalyzerBolt", "img");
+        builder.setBolt("IndexBolt", indexer,1).shuffleGrouping("ExtractFeaturesBolt");
         //builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer", "kw");
 
         Config conf = new Config();
@@ -75,9 +75,14 @@ public class RssMonitorTopologyDistr
         conf.setMaxSpoutPending(5000);
         
         // Configure supervisors for spout and bolt types
-        conf.put("placement.analyzer", "blade6.blades");
+        //conf.put("placement.analyzer", "blade6.blades");
         //conf.put("placement.reader", "knot27.fit.vutbr.cz");
-        conf.put("placement.downloader", "blade5.blades");
+        //conf.put("placement.downloader", "blade5.blades");
+        
+        // Configure the start time for analysis in ISO 8601
+        conf.put("advisor.analysis.startTime", "2014-05-31 17:30:00");
+        // Rescheduling interval in seconds
+        conf.put("advisor.analysis.rescheduling", 30);
         
         // Submit topology
         StormSubmitter.submitTopology("Webstorm", conf, builder.createTopology());
