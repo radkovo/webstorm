@@ -51,10 +51,9 @@ public class ExtractFeaturesBolt implements IRichBolt {
      * @throws SQLException 
      * @throws UnknownHostException 
      */
-	public ExtractFeaturesBolt(String uuid) throws SQLException, UnknownHostException{
+	public ExtractFeaturesBolt(String uuid) throws SQLException{
 		webstormId=uuid;
 		monitor=new Monitoring(webstormId);
-		hostname=InetAddress.getLocalHost().getHostName();
 	}
 
     @SuppressWarnings("rawtypes")
@@ -62,6 +61,12 @@ public class ExtractFeaturesBolt implements IRichBolt {
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector)
     {
         this.collector = collector;
+        try{
+			hostname=InetAddress.getLocalHost().getHostName();
+		}
+		catch(UnknownHostException e){
+			hostname="-unknown-";
+		}
     }
 
     @Override

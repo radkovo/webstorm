@@ -100,7 +100,7 @@ public class ManualScheduler implements IScheduler {
             	Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
             	Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
             	reschedulingForTopology.put(topology.getId(), nextReschedule);
-            	System.out.println("Next reschedule set to: " + nextReschedule.toString());
+            	//System.out.println("Next reschedule set to: " + nextReschedule.toString());
             	
             	// Schedule executors to hosts where we don't have monitoring data
             	scheduleToNotObserved(cluster, topology);
@@ -164,22 +164,29 @@ public class ManualScheduler implements IScheduler {
         	for(int i = 0; i < executorRatio; i++){
         		// Not needed executor types for this host
         		HashSet<String> noNeedEexecTypes = new HashSet<String>();
-    			if(!measured.isEmpty()){
+    			if(measured.containsKey(host)){
             		noNeedEexecTypes.addAll(measured.get(host));
+            		System.out.println("No need execs measured: " + measured.get(host));
     			}
-    			if(!execsToHost.isEmpty()){
+    			if(execsToHost.containsKey(host)){
     				noNeedEexecTypes.addAll(execsToHost.get(host));
+    				System.out.println("No need execs to be scheduled: " + execsToHost.get(host));
     			}
     			
-    			System.out.println("No need execs: "+noNeedEexecTypes);
+    			System.out.println("No need execs: " + noNeedEexecTypes);
         		
         		// Look for suitable executor (first executor type that was not measured on this host)
         		for(String execType : componentToExecutors.keySet()){
-        			System.out.println("Exec to decide: " + execType);
+        			//System.out.println("Exec to decide: " + execType);
         			if(!noNeedEexecTypes.contains(execType) && !componentToExecutors.get(execType).isEmpty()){
         				// Add executor type to unneeded
         				if(execsToHost.containsKey(host)){
         					execsToHost.get(host).add(execType);
+        				}
+        				else{
+        					List<String> toAdd = new LinkedList<String>();
+        					toAdd.add(execType);
+        					execsToHost.put(host, toAdd);
         				}
         				// Add one executor of the type to this slot
         				List<ExecutorDetails> slotsExecs = toBePlaced.get(slot);
@@ -211,14 +218,14 @@ public class ManualScheduler implements IScheduler {
 	        		continue;
 	        	}
 	        	
-	        	System.out.println("Supervisor for additional schedule: " + supervisor.getHost());
-	        	System.out.println("Slots: " + availableSlots.size());
+	        	System.out.println("Supervisor for additional schedule: " + supervisor.getHost() + " Slots: " + availableSlots.size());
+	        	//System.out.println("Slots: " + availableSlots.size());
 	        	
 	        	// Find and schedule unscheduled executors
 	            for(List<ExecutorDetails> executors : componentToExecutors.values()){
 	            	if(!executors.isEmpty()){
 	            		needSchedulingExecCount += executors.size();
-	            		System.out.println("Eecutors: " + executors.size());
+	            		System.out.println("Executors: " + executors.size());
 	            		// Find best slot on supervisor
 	            		WorkerSlot bestSlot = null;
 	            		Integer bestSlotExecutors = null;
