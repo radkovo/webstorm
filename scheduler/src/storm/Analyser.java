@@ -47,7 +47,7 @@ public class Analyser {
         Map conf = topology.getConf();
 		
 		// Monitoring start time - if no time given, time is set to now
-        if(!conf.containsKey("advisor.analysis.startTime")){
+        if(conf.containsKey("advisor.analysis.startTime")){
         	startTime = (String) conf.get("advisor.analysis.startTime");
         }
         else{

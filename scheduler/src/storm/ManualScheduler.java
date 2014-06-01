@@ -85,14 +85,21 @@ public class ManualScheduler implements IScheduler {
             // Schedule if needed
             if (!needsScheduling) {
             	System.out.println("Websotrm topology DOES NOT NEED scheduling.");
+            	
+            	// Set rescheduling if not set for this topology
+            	if(!reschedulingForTopology.containsKey(topology.getId())){
+	            	// Find the rescheduling interval and set next reschedule
+	            	Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
+	            	Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
+	            	reschedulingForTopology.put(topology.getId(), nextReschedule);
+            	}
             } else {
             	System.out.println("Webstorm topology needs scheduling.");
                 
             	// Find the rescheduling interval and set next reschedule
-            	Long reschedulingInterval = (Long)conf.get("advisor.analysis.rescheduling");
+            	Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
             	Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
             	reschedulingForTopology.put(topology.getId(), nextReschedule);
-            	DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'");
             	System.out.println("Next reschedule set to: " + nextReschedule.toString());
             	
             	// Schedule executors to hosts where we don't have monitoring data
@@ -108,6 +115,13 @@ public class ManualScheduler implements IScheduler {
     }
     
     
+    /**
+     * Schedule executors primarily to hosts where they did not run before.
+     * Uses analyser to get information about already measured hosts to executors combinations. 
+     * 
+     * @param cluster
+     * @param topology
+     */
     public void scheduleToNotObserved(Cluster cluster, TopologyDetails topology)
     {
     	// Map of already measured executor types per host
@@ -146,17 +160,23 @@ public class ManualScheduler implements IScheduler {
         	// Host by nodeId
         	String host = cluster.getSupervisorById(slot.getNodeId()).getHost();
         	System.out.println("Host: "+host);
+        	// Repeat for each host multiple times according to executor ratio for each slot
         	for(int i = 0; i < executorRatio; i++){
         		// Not needed executor types for this host
         		HashSet<String> noNeedEexecTypes = new HashSet<String>();
-    			if(measured.size() > 0 && execsToHost.size() > 0){
+    			if(!measured.isEmpty()){
             		noNeedEexecTypes.addAll(measured.get(host));
-        			noNeedEexecTypes.addAll(execsToHost.get(host));
     			}
+    			if(!execsToHost.isEmpty()){
+    				noNeedEexecTypes.addAll(execsToHost.get(host));
+    			}
+    			
+    			System.out.println("No need execs: "+noNeedEexecTypes);
         		
-        		// Look for suitable executor
+        		// Look for suitable executor (first executor type that was not measured on this host)
         		for(String execType : componentToExecutors.keySet()){
-        			if(!noNeedEexecTypes.contains(execType) && componentToExecutors.get(execType).size() > 0){
+        			System.out.println("Exec to decide: " + execType);
+        			if(!noNeedEexecTypes.contains(execType) && !componentToExecutors.get(execType).isEmpty()){
         				// Add executor type to unneeded
         				if(execsToHost.containsKey(host)){
         					execsToHost.get(host).add(execType);
@@ -178,40 +198,65 @@ public class ManualScheduler implements IScheduler {
         
         Map<String, SupervisorDetails> supervisors = cluster.getSupervisors();
         // Schedule the rest of unscheduled executors - host after host
-        for(SupervisorDetails supervisor : supervisors.values()){
-        	List<WorkerSlot> slots = cluster.getAvailableSlots(supervisor);
-        	
-        	// Skip supervisor without slots
-        	if(slots.size() == 0){
-        		continue;
-        	}
-        	
-        	System.out.println("Supervisor for additional schedule: " + supervisor.getHost());
-        	System.out.println("Slots: " + slots.size());
-        	
-        	// Find and schedule unscheduled executors
-            for(List<ExecutorDetails> executors : componentToExecutors.values()){
-            	if(executors.size() > 0){
-            		// Find best slot on supervisor
-            		WorkerSlot bestSlot = null;
-            		Integer bestSlotExecutors = null;
-            		for(WorkerSlot slot : slots){
-            			int size = toBePlaced.get(slot).size();
-            			if(bestSlotExecutors == null || size < bestSlotExecutors){
-            				bestSlotExecutors = size;
-            				bestSlot = slot;
-            			}
-            		}
-            		// Assign new executor to slot
-    				List<ExecutorDetails> slotsExecs = toBePlaced.get(bestSlot);
-    				if(slotsExecs == null){
-    					slotsExecs = new LinkedList<ExecutorDetails>();
-    				}
-    				slotsExecs.add(executors.remove(0));
-    				toBePlaced.put(bestSlot, slotsExecs);
-    				break;
-            	}
-            }
+        // These executors do not have any requirements for placement in this schedule
+        // We need to do this round-robin over hosts multiple times
+        Integer lastNeedSchedulingExecCount = null;
+        for(int i = 0; i < 200; i++){
+        	int needSchedulingExecCount = 0;
+	        for(SupervisorDetails supervisor : supervisors.values()){
+	        	List<WorkerSlot> availableSlots = cluster.getAvailableSlots(supervisor);
+	        	
+	        	// Skip supervisor without slots
+	        	if(availableSlots.size() == 0){
+	        		continue;
+	        	}
+	        	
+	        	System.out.println("Supervisor for additional schedule: " + supervisor.getHost());
+	        	System.out.println("Slots: " + availableSlots.size());
+	        	
+	        	// Find and schedule unscheduled executors
+	            for(List<ExecutorDetails> executors : componentToExecutors.values()){
+	            	if(!executors.isEmpty()){
+	            		needSchedulingExecCount += executors.size();
+	            		System.out.println("Eecutors: " + executors.size());
+	            		// Find best slot on supervisor
+	            		WorkerSlot bestSlot = null;
+	            		Integer bestSlotExecutors = null;
+	            		for(WorkerSlot slot : availableSlots){
+	            			List<ExecutorDetails> toBePlacedOnSlot = toBePlaced.get(slot);
+	            			int size = 0;
+	            			if(toBePlacedOnSlot != null){
+	            				size = toBePlacedOnSlot.size();
+	            			}
+	            			if(bestSlotExecutors == null || size < bestSlotExecutors){
+	            				bestSlotExecutors = size;
+	            				bestSlot = slot;
+	            			}
+	            		}
+	            		// Assign new executor to slot
+	    				List<ExecutorDetails> slotsExecs = toBePlaced.get(bestSlot);
+	    				if(slotsExecs == null){
+	    					slotsExecs = new LinkedList<ExecutorDetails>();
+	    				}
+	    				slotsExecs.add(executors.remove(0));
+	    				toBePlaced.put(bestSlot, slotsExecs);
+	    				break;
+	            	}
+	            }
+	        }
+	        
+	        // Decide if we need to go over supervisors (hosts) again
+	        if(needSchedulingExecCount == 0){
+	        	break;
+	        }
+	        /*
+	        if(lastNeedSchedulingExecCount != null && needSchedulingExecCount == lastNeedSchedulingExecCount){
+	        	System.out.println("Problems with scheduling, the number of unscheduled executors"+
+	        			" didn't decrease from last iteration. Unscheduled executors: " + ((Integer)needSchedulingExecCount).toString());
+	        	break;
+	        }
+	        */
+	        lastNeedSchedulingExecCount = needSchedulingExecCount;
         }
         
         // Schedule prepared executors to slots

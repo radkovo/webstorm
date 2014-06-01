@@ -82,7 +82,7 @@ public class RssMonitorTopologyDistr
         // Configure the start time for analysis in ISO 8601
         conf.put("advisor.analysis.startTime", "2014-05-31 17:30:00");
         // Rescheduling interval in seconds
-        conf.put("advisor.analysis.rescheduling", 30);
+        conf.put("advisor.analysis.rescheduling", 40);
         
         // Submit topology
         StormSubmitter.submitTopology("Webstorm", conf, builder.createTopology());
