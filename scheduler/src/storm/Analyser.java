@@ -34,9 +34,9 @@ public class Analyser {
 	// Monitoring start time in ISO 8601 string
 	private String startTime = null;
 	// DB connection
-	Connection conn = null;
+	private Connection conn = null;
 	// ISO date formatter
-	DateFormat isoFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+	private DateFormat isoFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 	
 	/**
 	 * Constructor with topology.
@@ -156,7 +156,8 @@ public class Analyser {
 				"			ORDER BY bolt_type, avgtime\r\n" + 
 				"		) h2 ON h1.bolt_type = h2.bolt_type AND h1.hostname != h2.hostname\r\n" + 
 				"	\r\n" + 
-				"	--WHERE h1.avgtime - h2.avgtime > 0\r\n" + 
+				"	--WHERE h1.avgtime - h2.avgtime > 0\r\n" +
+				"	WHERE h1.avgtime > 0\r\n" +
 				"	--GROUP BY h1.bolt_type, h1.hostname, h2.hostname, h1.count, h2.count, h1.avgtime, h2.avgtime\r\n" + 
 				"	ORDER BY bolt_type, h1loss DESC\r\n" + 
 				"	) AS x\r\n" + 
@@ -169,7 +170,7 @@ public class Analyser {
 		
 		try {
 			Statement stmt = conn.createStatement();
-			System.out.println("Scheduling order:" + sql);
+			//System.out.println("Scheduling order:" + sql);
 			ResultSet rs = stmt.executeQuery(sql);
 			while(rs.next()){
 		         // Executors to hosts

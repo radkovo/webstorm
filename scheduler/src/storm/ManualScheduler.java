@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -33,9 +34,15 @@ public class ManualScheduler implements IScheduler {
 	private Map<String, Date> reschedulingForTopology = new HashMap<String, Date>();
 	// End of profiling of topology
 	private Map<String, Date> endOfProfilingForTopology = new HashMap<String, Date>();
+	// For experiments the worst known case scheduling was done
+	private Set<String> worstCaseDone = new HashSet<String>();
+	// For experiments the standard scheduling was done
+	private Set<String> standardCaseDone = new HashSet<String>();
 	// Analysers for topologies (topology ID)
 	private Map<String, Analyser> analysers = new HashMap<String, Analyser>();
 	
+	// ISO date formatter
+	private DateFormat isoFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 	
 	public void prepare(Map config) {
 		
@@ -53,7 +60,7 @@ public class ManualScheduler implements IScheduler {
 	 * @param cluster
 	 */
     public void schedule(Topologies topologies, Cluster cluster) {
-    	System.out.println("ManualScheduler: begin scheduling");
+    	System.out.println("SchedulingAdvisor: begin scheduling");
         // Gets the topology which we want to schedule
         TopologyDetails topology = topologies.getByName("Webstorm");
 
@@ -97,38 +104,190 @@ public class ManualScheduler implements IScheduler {
             else {
             	System.out.println("Webstorm topology needs scheduling.");
                 
+            	// Find the rescheduling interval and set next reschedule
+        		Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
+        		Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
+        		reschedulingForTopology.put(topology.getId(), nextReschedule);
+        		//System.out.println("Next reschedule set to: " + nextReschedule.toString());
+            	
             	// Check if all hosts to executors were measured
             	// Schedule for performance
             	if(endOfProfilingForTopology.containsKey(topology.getId()) || allExecutorsToHostsMeasured(topology)){
             		// Clear rescheduling interval if set
-            		reschedulingForTopology.remove(topology.getId());
+            		//reschedulingForTopology.remove(topology.getId());
             		
-            		// Get the right schedule
-            		String topologyId = topology.getId();
-            		Date endTime = endOfProfilingForTopology.get(topologyId);
-            		LinkedHashMap<String, LinkedList<String>> schedule = 
-            				analysers.get(topologyId).getBestPlacementsForExecutorTypes(endTime, false);
-            		System.out.println("Schedule: " + schedule);
+            		// Worst case schedule for comparison
+            		if(!worstCaseDone.contains(topology.getId())){
+            			System.out.println("==sched== Worst case scheduling (from, to): " + isoFormatter.format(new Date()) +
+            					" " + reschedulingForTopology.get(topology.getId()));
+            			
+            			scheduleForPerformance(topology, cluster, true);
+            			
+            			worstCaseDone.add(topology.getId());
+            		}
+            		// Even scheduler for comparison
+            		else if(!standardCaseDone.contains(topology.getId())){
+            			System.out.println("==sched== Standard scheduling (from, to): " + isoFormatter.format(new Date()) +
+            					" " + reschedulingForTopology.get(topology.getId()));
+            			
+            			// Even scheduler as standard scheduling
+            			System.out.println("EvenScheduler fired...");
+            			new EvenScheduler().schedule(topologies, cluster);
+            			System.out.println("EvenScheduler done...");
+            			
+            			standardCaseDone.add(topology.getId());
+            		}
+            		// Performance schedule
+            		else{
+            			System.out.println("==sched== Performance scheduling (from, to): " + isoFormatter.format(new Date()) +
+            					" " + reschedulingForTopology.get(topology.getId()));
+            			
+            			// Clear rescheduling interval if set
+                		reschedulingForTopology.remove(topology.getId());
+                		
+                		
+                		scheduleForPerformance(topology, cluster, false);
+            		}
             		
-            		
-            		// Even scheduler as standard scheduling
-                    System.out.println("EvenScheduler fired...");
-                    new EvenScheduler().schedule(topologies, cluster);
-                    System.out.println("EvenScheduler done...");
             	}
             	// Schedule for profiling
             	else{
-            		// Find the rescheduling interval and set next reschedule
-            		Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
-            		Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
-            		reschedulingForTopology.put(topology.getId(), nextReschedule);
-            		//System.out.println("Next reschedule set to: " + nextReschedule.toString());
-            		
             		// Schedule executors to hosts where we don't have monitoring data
             		scheduleToNotObserved(topology, cluster);
             	}
             }
         }
+    }
+    
+    
+    /**
+     * Schedule executors to best known suitable hosts. Starts with executor types with most
+     * significant performance loss on other types of hardware.
+     * 
+     * The executors that cannot fit to free slots are paced to nodes running executors with 
+     * least significant performance loss.
+     * 
+     * @param topology
+     * @param cluster
+     * @param worstPlacement
+     */
+    public void scheduleForPerformance(TopologyDetails topology, Cluster cluster, boolean worstPlacement)
+    {
+    	// Get the schedule
+		String topologyId = topology.getId();
+		Date endTime = endOfProfilingForTopology.get(topologyId);
+		LinkedHashMap<String, LinkedList<String>> schedule = 
+				analysers.get(topologyId).getBestPlacementsForExecutorTypes(endTime, worstPlacement);
+		System.out.println("Schedule: " + schedule);
+		
+		// Find out all the needs-scheduling components of this topology
+		Map<String, List<ExecutorDetails>> componentToExecutors = cluster.getNeedsSchedulingComponentToExecutors(topology);
+		
+		// Find all available slots and make hosts to slots mapping
+        //List<WorkerSlot> allAvailableSlots = cluster.getAvailableSlots();
+        
+        // Map of to be placed executors per slot
+    	HashMap<WorkerSlot, List<ExecutorDetails>> toBePlaced = new HashMap<WorkerSlot, List<ExecutorDetails>>();
+		
+		//
+		// Placing executor types in given order to suitable hosts according the schedule
+		//
+    	LinkedList<String> lastHosts = null; // For later usage in additional scheduling
+    	mainLoop:
+		for(Entry<String, LinkedList<String>> e : schedule.entrySet()){
+			LinkedList<String> suitableHosts = e.getValue();
+			String executorType = e.getKey();
+			lastHosts = suitableHosts;
+			
+			// Executors to be placed
+			List<ExecutorDetails> executors = componentToExecutors.get(executorType);
+			if(executors == null || executors.isEmpty()){
+				continue mainLoop;
+			}
+			
+			// Schedule as much executors as possible to each host ordered by suitability
+			for(String host : suitableHosts){
+				// Available slots for host
+				List<SupervisorDetails> supervisors = cluster.getSupervisorsByHost(host);
+				for(SupervisorDetails supervisor : supervisors){
+					List<WorkerSlot> slots = cluster.getAvailableSlots(supervisor);
+					for(WorkerSlot slot : slots){
+						// Continue when all executors of given type were placed
+						if(executors.isEmpty()){
+							continue mainLoop;
+						}
+						// Skip already scheduled slots
+						if(toBePlaced.containsKey(slot)){
+							continue;
+						}
+						
+						//List<ExecutorDetails> slotsExecs = toBePlaced.get(slot);
+        				//if(slotsExecs == null){
+        				//	slotsExecs = new LinkedList<ExecutorDetails>();
+        				//}
+						List<ExecutorDetails> slotsExecs = new LinkedList<ExecutorDetails>();
+        				slotsExecs.add(executors.remove(0));
+						toBePlaced.put(slot, slotsExecs);
+					}
+				}
+			}
+		}
+    	
+    	// Place the rest of executors (use last list of hosts in reverse order
+    	noAvailableSlotsLoop:
+    	for(int i = 0; i < 100; i++){
+	    	ListIterator<String> hostsIterator = lastHosts.listIterator(lastHosts.size());
+	    	//System.out.println("Additional scheduling hosts: " + lastHosts);
+	        while(hostsIterator.hasPrevious()){
+	        	String host = hostsIterator.previous();
+	        	//System.out.println("Host: " + host); 
+	        	mainLoop:
+	        	for(List<ExecutorDetails> executors : componentToExecutors.values()){
+	        		int slotsFound = 0;
+	        		//System.out.println("Executors to place: " + executors.size());
+		        	// Available slots for host
+					List<SupervisorDetails> supervisors = cluster.getSupervisorsByHost(host);
+					for(SupervisorDetails supervisor : supervisors){
+						List<WorkerSlot> slots = cluster.getAvailableSlots(supervisor);
+						slotsFound += slots.size();
+						
+						// Assign executors to slots
+						for(WorkerSlot slot : slots){
+							// Continue when all executors of given type were placed
+							if(executors.isEmpty()){
+								continue mainLoop;
+							}
+							
+							List<ExecutorDetails> slotsExecs = toBePlaced.get(slot);
+		    				if(slotsExecs == null){
+		    					slotsExecs = new LinkedList<ExecutorDetails>();
+		    				}
+		    				slotsExecs.add(executors.remove(0));
+							toBePlaced.put(slot, slotsExecs);
+						}
+					}
+					// If no slots were found, free some (makes the rest of executors run on one host)
+					// DOES NOT WORK - we have to first clean slots and then do all the scheduling
+					if(slotsFound == 0){
+						cluster.freeSlots(cluster.getAssignableSlots(supervisors.get(0)));
+						continue noAvailableSlotsLoop;
+					}
+	        	}
+	        }
+	        break;
+        }
+    	
+		
+		// Schedule prepared executors to slots
+        for(Entry<WorkerSlot, List<ExecutorDetails>> e : toBePlaced.entrySet()){
+        	WorkerSlot slot = e.getKey();
+        	if(!cluster.isSlotOccupied(slot)) // Just as a last check. If the slot is occupied, scheduling is left for now
+        		cluster.assign(slot, topology.getId(), e.getValue());
+        	else
+        		System.out.println("Slot occupied: " + slot + " " + e.getValue());
+        }
+		
+		System.out.println("Placed: " + toBePlaced);
     }
     
     
@@ -142,9 +301,6 @@ public class ManualScheduler implements IScheduler {
     public void scheduleToNotObserved(TopologyDetails topology, Cluster cluster)
     {
     	// Map of already measured executor types per host
-    	//Map<String, List<String>> measured = new HashMap<String, List<String>>();
-    	//measured.put("knot04.fit.vutbr.cz", Arrays.asList("reader", "downloader"));
-    	//measured.put("blade5.blades", Arrays.asList("extractor", "downloader", "analyzer"));
     	Map<String, List<String>> measured = analysers.get(topology.getId()).getMeasuredHosts();
     	System.out.println("Measured: " + measured.toString());
     	
