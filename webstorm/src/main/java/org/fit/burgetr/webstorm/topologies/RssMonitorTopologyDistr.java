@@ -61,11 +61,11 @@ public class RssMonitorTopologyDistr
         TopologyBuilder builder = new TopologyBuilder();
 
         builder.setSpout("FeedUrlSpout", urlSpout, 4);
-        builder.setBolt("FeedReaderBolt", reader, 1).shuffleGrouping("FeedUrlSpout");
+        builder.setBolt("FeedReaderBolt", reader, 2).shuffleGrouping("FeedUrlSpout");
         builder.setBolt("DownloaderBolt", downloader, 4).shuffleGrouping("FeedReaderBolt");
         builder.setBolt("AnalyzerBolt", analyzer, 3).shuffleGrouping("DownloaderBolt");
-        builder.setBolt("ExtractFeaturesBolt", extractor, 1).globalGrouping("AnalyzerBolt", "img");
-        builder.setBolt("IndexBolt", indexer,1).shuffleGrouping("ExtractFeaturesBolt");
+        builder.setBolt("ExtractFeaturesBolt", extractor, 2).globalGrouping("AnalyzerBolt", "img");
+        builder.setBolt("IndexBolt", indexer,3).shuffleGrouping("ExtractFeaturesBolt");
         //builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer", "kw");
 
         Config conf = new Config();

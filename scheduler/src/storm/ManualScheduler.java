@@ -8,12 +8,15 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
+
+import org.apache.commons.collections4.CollectionUtils;
 
 import backtype.storm.scheduler.Cluster;
 import backtype.storm.scheduler.EvenScheduler;
@@ -28,6 +31,8 @@ import backtype.storm.scheduler.WorkerSlot;
 public class ManualScheduler implements IScheduler {
 	// Next rescheduling times by topologies (topology ID)
 	private Map<String, Date> reschedulingForTopology = new HashMap<String, Date>();
+	// End of profiling of topology
+	private Map<String, Date> endOfProfilingForTopology = new HashMap<String, Date>();
 	// Analysers for topologies (topology ID)
 	private Map<String, Analyser> analysers = new HashMap<String, Analyser>();
 	
@@ -38,11 +43,14 @@ public class ManualScheduler implements IScheduler {
 
 	
 	/**
-	 * Schedule and reschedule first to gather profiling data about host/executor
-	 * and after getting sufficient monitoring data prepare the "best" possible schedule
+	 * Schedules and reschedules first to gather profiling data about hosts/executors
+	 * and then, after getting sufficient monitoring data, prepares the "best" possible schedule
 	 * based on data gathered during first phase.
 	 * 
 	 * For unsolved scheduling fires default scheduler.
+	 * 
+	 * @param topologies
+	 * @param cluster
 	 */
     public void schedule(Topologies topologies, Cluster cluster) {
     	System.out.println("ManualScheduler: begin scheduling");
@@ -64,25 +72,16 @@ public class ManualScheduler implements IScheduler {
             Map conf = topology.getConf(); 
             
             System.out.println("Reschedules: " + reschedulingForTopology);
-            // Check if the rescheduling is needed, if so, unschedule topology
+            // Check if the rescheduling is needed, if so, unschedule the topology
             if(reschedulingForTopology.containsKey(topology.getId()) && new Date().after(reschedulingForTopology.get(topology.getId()))){
-            	// Find all slots from this topology
-            	// Assignment of this topology
-            	SchedulerAssignment assignment = cluster.getAssignments().get(topology.getId());
-            	// Map of executors to slots
-            	Map<ExecutorDetails, WorkerSlot> executorToSlot = assignment.getExecutorToSlot();
-            	
-            	Set<WorkerSlot> slotsToFree = new HashSet<WorkerSlot>(executorToSlot.values());
-            	
-            	System.out.println("Slots to free: " + slotsToFree.toString());
-            	
-            	// Free the slots used by this topology
-            	cluster.freeSlots(slotsToFree);
+            	// Unschedule
+            	unscheduleTopology(topology, cluster);
             }
+            
             
             boolean needsScheduling = cluster.needsScheduling(topology);
 
-            // Schedule if needed
+            // Do not schedule (just set reschedule time according to interval)
             if (!needsScheduling) {
             	System.out.println("Websotrm topology DOES NOT NEED scheduling.");
             	
@@ -93,25 +92,43 @@ public class ManualScheduler implements IScheduler {
 	            	Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
 	            	reschedulingForTopology.put(topology.getId(), nextReschedule);
             	}
-            } else {
+            }
+            // SCHEDULE
+            else {
             	System.out.println("Webstorm topology needs scheduling.");
                 
-            	// Find the rescheduling interval and set next reschedule
-            	Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
-            	Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
-            	reschedulingForTopology.put(topology.getId(), nextReschedule);
-            	//System.out.println("Next reschedule set to: " + nextReschedule.toString());
-            	
-            	// Schedule executors to hosts where we don't have monitoring data
-            	scheduleToNotObserved(cluster, topology);
+            	// Check if all hosts to executors were measured
+            	// Schedule for performance
+            	if(endOfProfilingForTopology.containsKey(topology.getId()) || allExecutorsToHostsMeasured(topology)){
+            		// Clear rescheduling interval if set
+            		reschedulingForTopology.remove(topology.getId());
+            		
+            		// Get the right schedule
+            		String topologyId = topology.getId();
+            		Date endTime = endOfProfilingForTopology.get(topologyId);
+            		LinkedHashMap<String, LinkedList<String>> schedule = 
+            				analysers.get(topologyId).getBestPlacementsForExecutorTypes(endTime, false);
+            		System.out.println("Schedule: " + schedule);
+            		
+            		
+            		// Even scheduler as standard scheduling
+                    System.out.println("EvenScheduler fired...");
+                    new EvenScheduler().schedule(topologies, cluster);
+                    System.out.println("EvenScheduler done...");
+            	}
+            	// Schedule for profiling
+            	else{
+            		// Find the rescheduling interval and set next reschedule
+            		Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
+            		Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
+            		reschedulingForTopology.put(topology.getId(), nextReschedule);
+            		//System.out.println("Next reschedule set to: " + nextReschedule.toString());
+            		
+            		// Schedule executors to hosts where we don't have monitoring data
+            		scheduleToNotObserved(topology, cluster);
+            	}
             }
         }
-        
-        // Let system's even scheduler handle the rest scheduling work
-        // you can also use your own other scheduler here.
-        System.out.println("EvenScheduler fired...");
-        new EvenScheduler().schedule(topologies, cluster);
-
     }
     
     
@@ -119,10 +136,10 @@ public class ManualScheduler implements IScheduler {
      * Schedule executors primarily to hosts where they did not run before.
      * Uses analyser to get information about already measured hosts to executors combinations. 
      * 
-     * @param cluster
      * @param topology
+     * @param cluster
      */
-    public void scheduleToNotObserved(Cluster cluster, TopologyDetails topology)
+    public void scheduleToNotObserved(TopologyDetails topology, Cluster cluster)
     {
     	// Map of already measured executor types per host
     	//Map<String, List<String>> measured = new HashMap<String, List<String>>();
@@ -274,5 +291,62 @@ public class ManualScheduler implements IScheduler {
         }
         
         System.out.print("Placed:\n" + toBePlaced.toString() + "\n");
+    }
+    
+    /**
+     * Free all slots used by given topology in cluster.
+     * 
+     * @param topology
+     * @param cluster
+     */
+    public void unscheduleTopology(TopologyDetails topology, Cluster cluster)
+    {
+    	// Find all slots from this topology
+    	//
+    	// Assignment of this topology
+    	SchedulerAssignment assignment = cluster.getAssignments().get(topology.getId());
+    	// Map of executors to slots
+    	Map<ExecutorDetails, WorkerSlot> executorToSlot = assignment.getExecutorToSlot();
+    	
+    	// Slots to be freed
+    	Set<WorkerSlot> slotsToFree = new HashSet<WorkerSlot>(executorToSlot.values());
+    	
+    	System.out.println("Slots to free: " + slotsToFree.toString());
+    	
+    	// Free the slots used by this topology
+    	cluster.freeSlots(slotsToFree);
+    }
+
+    
+    /**
+     * Checks if each executor were measured on each host.
+     * Writes Date of end of profiling into endOfProfillingForTopology Map.
+     * 
+     * @param topology
+     * @return Are all executor to host combinations measured?
+     */
+    public boolean allExecutorsToHostsMeasured(TopologyDetails topology)
+    {
+    	Map<String, List<String>> measured = analysers.get(topology.getId()).getMeasuredHosts();
+    	
+    	if(measured.isEmpty()){
+    		return false;
+    	}
+    	
+    	// Compare each hosts's executor types together, if all are the same, we're done
+    	Collection<String> commonList = measured.remove(measured.keySet().iterator().next());
+    	int size = commonList.size();
+        for(List<String> l : measured.values()){
+        	commonList = CollectionUtils.retainAll(commonList, l);
+        }
+    	
+        // List of first host is same size as intersection of all lists together (all lists are the same)
+        if(size == commonList.size()){
+        	endOfProfilingForTopology.put(topology.getId(), new Date());
+        	return true;
+        }
+        else{
+        	return false;
+        }
     }
 }

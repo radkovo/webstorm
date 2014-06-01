@@ -45,5 +45,10 @@
   		<artifactId>postgresql</artifactId>
   		<version>8.4-702.jdbc4</version>
   	</dependency>
+  	<dependency>
+  		<groupId>org.apache.commons</groupId>
+  		<artifactId>commons-collections4</artifactId>
+  		<version>4.0</version>
+  	</dependency>
   </dependencies>
 </project>
