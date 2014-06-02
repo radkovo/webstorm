@@ -170,7 +170,7 @@ public class Analyser {
 		
 		try {
 			Statement stmt = conn.createStatement();
-			//System.out.println("Scheduling order:" + sql);
+			System.out.println("Scheduling order:" + sql);
 			ResultSet rs = stmt.executeQuery(sql);
 			while(rs.next()){
 		         // Executors to hosts

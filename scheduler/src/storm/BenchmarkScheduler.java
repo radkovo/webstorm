@@ -29,7 +29,7 @@ import backtype.storm.scheduler.Topologies;
 import backtype.storm.scheduler.TopologyDetails;
 import backtype.storm.scheduler.WorkerSlot;
 
-public class ManualScheduler implements IScheduler {
+public class BenchmarkScheduler implements IScheduler {
 	// Next rescheduling times by topologies (topology ID)
 	private Map<String, Date> reschedulingForTopology = new HashMap<String, Date>();
 	// End of profiling of topology
@@ -118,8 +118,8 @@ public class ManualScheduler implements IScheduler {
             		
             		// Worst case schedule for comparison
             		if(!worstCaseDone.contains(topology.getId())){
-            			System.out.println("==sched== Worst case scheduling (from, to): " + isoFormatter.format(new Date()) +
-            					" " + reschedulingForTopology.get(topology.getId()));
+            			System.out.println("==sched== Worst case scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
+            					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
             			
             			scheduleForPerformance(topology, cluster, true);
             			
@@ -127,8 +127,8 @@ public class ManualScheduler implements IScheduler {
             		}
             		// Even scheduler for comparison
             		else if(!standardCaseDone.contains(topology.getId())){
-            			System.out.println("==sched== Standard scheduling (from, to): " + isoFormatter.format(new Date()) +
-            					" " + reschedulingForTopology.get(topology.getId()));
+            			System.out.println("==sched== Standard scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
+            					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
             			
             			// Even scheduler as standard scheduling
             			System.out.println("EvenScheduler fired...");
@@ -139,8 +139,8 @@ public class ManualScheduler implements IScheduler {
             		}
             		// Performance schedule
             		else{
-            			System.out.println("==sched== Performance scheduling (from, to): " + isoFormatter.format(new Date()) +
-            					" " + reschedulingForTopology.get(topology.getId()));
+            			System.out.println("==sched== Performance scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
+            					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
             			
             			// Clear rescheduling interval if set
                 		reschedulingForTopology.remove(topology.getId());
