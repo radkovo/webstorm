@@ -43,6 +43,7 @@ public class Monitoring implements Serializable{
 	 */
 	public void MonitorTuple(String bolt_type, String tuple_id,String hostname, Long estimatedNanoS) throws SQLException 
 	{
+		
 		int estimatedMs = 0;
 		if(estimatedNanoS!=null){
 			estimatedMs = new Long(estimatedNanoS/1000000).intValue();
@@ -75,6 +76,7 @@ public class Monitoring implements Serializable{
         stmt.close();
         conn.commit();
         conn.close();
+        
 	}
 	
 	/**
