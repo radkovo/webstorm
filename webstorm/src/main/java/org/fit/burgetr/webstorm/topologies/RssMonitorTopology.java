@@ -43,7 +43,7 @@ public class RssMonitorTopology
         
         
         //create spouts and bolt
-        FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt",uuid);
+        FeedURLSpout urlSpout = new FeedURLSpout("http://knot01.fit.vutbr.cz/rss/rss.txt",uuid);
         FeedReaderBolt reader = new FeedReaderBolt(uuid);
         DownloaderBolt downloader = new DownloaderBolt(uuid);
         AnalyzerBolt analyzer = new AnalyzerBolt("kw","img",uuid);

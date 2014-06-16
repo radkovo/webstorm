@@ -9,13 +9,15 @@ import org.apache.lucene.search.Query;
 
 public class ImagesToDeleteQuery extends CustomScoreQuery {
 
-    public ImagesToDeleteQuery(Query subQuery) {
+	private int history;
+    public ImagesToDeleteQuery(Query subQuery,int h) {
 		super(subQuery);
-		// TODO Auto-generated constructor stub
+		history=h;
+		
 	}
 
     protected CustomScoreProvider getCustomScoreProvider(
             AtomicReaderContext context) throws IOException {
-        return new ImageScoreProvider(context);
+        return new ImageScoreProvider(context,history);
     }
 }

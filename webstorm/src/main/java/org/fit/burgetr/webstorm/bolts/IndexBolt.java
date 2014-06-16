@@ -32,6 +32,8 @@ import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.search.*;
 import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
+import org.joda.time.Minutes;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,10 +63,8 @@ public class IndexBolt implements IRichBolt{
     private String hostname;
     //private OutputCollector collector;
     private float threshold;
-    private int lastMinute;
     private int history;
     private int maxDocuments;
-    private int updateInterval;
     
 
     /**
@@ -76,28 +76,23 @@ public class IndexBolt implements IRichBolt{
     public IndexBolt(String uuid) throws SQLException {
     	webstormId=uuid;
     	monitor=new Monitoring(webstormId);
-    	lastMinute=0;
-    	updateInterval=1;
     	threshold=0.7F;
-    	history=10;
+    	history=60;
     	maxDocuments=100;
     }
     
     /**
      * Creates a new IndexBolt.
      * @param uuid the identifier of actual deployment
-     * @param ui the update interval window in minutes
      * @param t the threshold of image similarity, when records should be updated
-     * @param h the history of similarity values that should be kept for similarity computation
+     * @param h the history (in minutes) of similarity values that should be kept for similarity computation
      * @param md the maximum of documents, that should be indexed
      * @throws SQLException 
      * @throws UnknownHostException 
      */
-    public IndexBolt(String uuid,int ui,int t, int h, int md) throws SQLException{
+    public IndexBolt(String uuid,int t, int h, int md) throws SQLException{
     	webstormId=uuid;
     	monitor=new Monitoring(webstormId);
-    	lastMinute=0;
-    	updateInterval=ui;
     	threshold=t;
     	history=h;
     	maxDocuments=md;
@@ -162,79 +157,7 @@ public class IndexBolt implements IRichBolt{
         DateTime now = DateTime.now();
         String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
         log.info("DateTime:"+dateString+", Indexing image from url: " + image_url+" (originating from document with uuid: "+uuid+")");
-        int actualMinute=now.getMinuteOfHour();
-        boolean updateWeights=(actualMinute!=lastMinute) && ((actualMinute%updateInterval)==0);
-        lastMinute=actualMinute;
-        
-        try {
-			ir = IndexReader.open(directory);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-        
-        if (updateWeights){
-        	for (int i=0; i<ir.maxDoc(); i++) {
 
-        	    Document doc = null;
-				try {
-					doc = ir.document(i);
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				int length=0;
-				IndexableField lengthField=doc.getField("length");
-				if (lengthField !=null)
-					length=lengthField.numericValue().intValue();
-				
-				String logString="";
-				
-				for (int counter=length;counter>0;counter--){
-					String fieldName=String.valueOf(counter-1);
-					/*
-					for (IndexableField ifield:doc.getFields()){
-						log.info("Field name: "+ifield.name());
-					}
-					log.info("Target field name: "+fieldName);
-					*/
-					IndexableField field=doc.getField(fieldName);
-					
-					
-					logString=" "+field.numericValue().floatValue()+logString;
-					doc.removeField(fieldName);
-					if (counter<history)
-						doc.add(new FloatField(String.valueOf(counter),field.numericValue().floatValue(),FloatField.TYPE_STORED));
-				}
-				doc.add(new FloatField("0",0.0F,FloatField.TYPE_STORED));
-				if (length<(history-1))
-					length++;
-				doc.removeField("length");
-				doc.add(new IntField("length", length, IntField.TYPE_STORED));
-				
-				
-				String myid=doc.getValues("myid")[0];
-            	Term t=new Term("myid",myid);
-            	
-            	try {
-					iw.updateDocument(t, doc);
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-
-            	log.info("Updating document "+myid+": "+logString);
-				
-        	}
-        	try {
-        		ir.close();
-				iw.commit();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        }
-        
         try {
 			ir = IndexReader.open(directory);
 		} catch (IOException e) {
@@ -261,21 +184,53 @@ public class IndexBolt implements IRichBolt{
             if (hits.score(i)>threshold){
             	String fileName = hits.doc(i).getValues(DocumentBuilder.FIELD_NAME_IDENTIFIER)[0];
                 log.info("Document similarity with "+fileName+" is "+hits.score(i));
-            	IndexableField f=hits.doc(i).getField("0");
+                
+                float actualScore=hits.score(i);
+                overThreshold+=1;
+
             	
-            	float weight=0.0F;
-            	if (f!=null){
-            		weight=f.numericValue().floatValue();
-            	}
-            	else{
-            		hits.doc(i).add(new IntField("length", 1, IntField.TYPE_STORED));
-            	}
-            	float actualScore=hits.score(i);
             	totalScore+=actualScore;
-            	overThreshold+=1;
-            	weight+=actualScore;
-            	hits.doc(i).removeField("0");
-            	hits.doc(i).add(new FloatField("0",weight, FloatField.TYPE_STORED));
+                IndexableField f=hits.doc(i).getField("length");
+                int length=0;
+                if (f!=null){
+                	length=f.numericValue().intValue();
+                }
+                String lengthString=String.valueOf(length);
+                hits.doc(i).add(new FloatField(lengthString,hits.score(i), FloatField.TYPE_STORED));
+                hits.doc(i).add(new Field("t"+lengthString,dateString,Field.Store.YES, Field.Index.NOT_ANALYZED));
+                length++;
+                hits.doc(i).removeField("length");
+				hits.doc(i).add(new IntField("length", length, IntField.TYPE_STORED));
+				
+				
+				//field from where
+				IndexableField s=hits.doc(i).getField("start");
+				int start=0;
+                if (s!=null){
+                	start=s.numericValue().intValue();
+                }
+                
+                boolean cont=true;
+                int index=start;
+                while (cont){
+                	String startVal=String.valueOf(index);
+                	Field val=(Field) hits.doc(i).getField("t"+startVal);
+                	String fieldTimestamp=val.stringValue();
+                	if (!meetRequirements(fieldTimestamp,now)){
+                		hits.doc(i).removeField(startVal);
+                		hits.doc(i).removeField("t"+startVal);
+                		index++;
+                	}
+                	else{
+                		cont=false;
+                		
+                		
+                	}
+                }
+                hits.doc(i).removeField("start");
+                hits.doc(i).add(new IntField("start", index, IntField.TYPE_STORED));
+                
+                
             	String myid=hits.doc(i).getValues("myid")[0];
             	Term t=new Term("myid",myid);
             	
@@ -303,6 +258,7 @@ public class IndexBolt implements IRichBolt{
         	float averageScore=totalScore/overThreshold;
         	document.add(new IntField("length", 1, IntField.TYPE_STORED));
         	document.add(new FloatField("0",averageScore, FloatField.TYPE_STORED));
+        	document.add(new Field("t0",dateString, Field.Store.YES, Field.Index.NOT_ANALYZED));
         }
         
         
@@ -333,7 +289,7 @@ public class IndexBolt implements IRichBolt{
         if (total>maxDocuments){
         	int documentsToDelete=total-maxDocuments;
         	
-        	Query q=new ImagesToDeleteQuery(new MatchAllDocsQuery());
+        	Query q=new ImagesToDeleteQuery(new MatchAllDocsQuery(),history);
         	IndexSearcher s = new IndexSearcher(ir);
             TopScoreDocCollector collector = TopScoreDocCollector.create(documentsToDelete, true);
             try {
@@ -390,11 +346,23 @@ public class IndexBolt implements IRichBolt{
 		}
 	}
 	
+	private boolean meetRequirements(String fieldTimestamp, DateTime now) {
+		String[] values1=fieldTimestamp.split("-");
+		DateTime from=new DateTime(Integer.parseInt(values1[0]),Integer.parseInt(values1[1]),Integer.parseInt(values1[2]),Integer.parseInt(values1[3]),Integer.parseInt(values1[4]),Integer.parseInt(values1[5]),Integer.parseInt(values1[6]));
+
+		Minutes diff=Minutes.minutesBetween(from, now);
+		if (diff.getMinutes()<=history)
+			return true;
+		return false;
+		
+	}
+
 	/**
      * Prints scores of all documents
      */
 	private void dumpAllScores(){
 		for (int i=0; i<ir.maxDoc(); i++) {
+			
 			log.info("Document score: "+getScore(i));
 		}
 	}
@@ -417,14 +385,29 @@ public class IndexBolt implements IRichBolt{
 			int length=0;
 			if (lengthField !=null)
 				length=lengthField.numericValue().intValue();
+			
+			int start=0;
+			IndexableField startField=d.getField("start");
+			if (startField !=null)
+				start=startField.numericValue().intValue();
 		    
 			float score=0.0F;
-			
-			for (int i=0;i<length;i++){
+			DateTime now=DateTime.now();
+			for (int i=start;i<length;i++){
 				String fieldName=String.valueOf(i);
 				IndexableField field=d.getField(fieldName);
-				score+=(length-i)*field.numericValue().floatValue();
+				Field timeStampField=(Field) d.getField("t"+fieldName);
+				String[] values1=timeStampField.stringValue().split("-");
+				DateTime from=new DateTime(Integer.parseInt(values1[0]),Integer.parseInt(values1[1]),Integer.parseInt(values1[2]),Integer.parseInt(values1[3]),Integer.parseInt(values1[4]),Integer.parseInt(values1[5]),Integer.parseInt(values1[6]));
+				int diff=Minutes.minutesBetween(from, now).getMinutes();
+				int scoreCoef=history-diff;
+				if (scoreCoef>0)
+					score+=scoreCoef*field.numericValue().floatValue();
+				
 			}
+			int numRecords=length-start;
+			if (numRecords>0)
+				return score/numRecords;
 		    
 		    return score;
 		}
@@ -473,6 +456,7 @@ public class IndexBolt implements IRichBolt{
 		// TODO Auto-generated method stub
 		return null;
 	}
+	
 
 
 }
