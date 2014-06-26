@@ -33,7 +33,6 @@ import org.apache.lucene.search.*;
 import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
 import org.joda.time.Minutes;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +43,8 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Tuple;
 
 import org.fit.burgetr.webstorm.util.*;
+
+import ch.qos.logback.classic.LoggerContext;
 
 /**
  * A bolt that indexes images
@@ -65,7 +66,9 @@ public class IndexBolt implements IRichBolt{
     private float threshold;
     private int history;
     private int maxDocuments;
-    
+    private int resultsPeriod;
+    private int resultsLength;
+    private int lastMinute;
 
     /**
      * Creates a new IndexBolt.
@@ -79,6 +82,10 @@ public class IndexBolt implements IRichBolt{
     	threshold=0.7F;
     	history=60;
     	maxDocuments=100;
+    	resultsLength=10;
+    	resultsPeriod=1;
+    	DateTime now = DateTime.now();
+    	lastMinute=now.getMinuteOfHour();
     }
     
     /**
@@ -90,12 +97,16 @@ public class IndexBolt implements IRichBolt{
      * @throws SQLException 
      * @throws UnknownHostException 
      */
-    public IndexBolt(String uuid,int t, int h, int md) throws SQLException{
+    public IndexBolt(String uuid,int t, int h, int md, int rp,int rl) throws SQLException{
     	webstormId=uuid;
     	monitor=new Monitoring(webstormId);
     	threshold=t;
     	history=h;
     	maxDocuments=md;
+    	resultsLength=rl;
+    	resultsPeriod=rp;
+    	DateTime now = DateTime.now();
+    	lastMinute=now.getMinuteOfHour();
     }
 
 	@SuppressWarnings("rawtypes")
@@ -156,8 +167,21 @@ public class IndexBolt implements IRichBolt{
 		}
         DateTime now = DateTime.now();
         String dateString=String.valueOf(now.getYear())+"-"+String.valueOf(now.getMonthOfYear())+"-"+String.valueOf(now.getDayOfMonth())+"-"+String.valueOf(now.getHourOfDay())+"-"+String.valueOf(now.getMinuteOfHour())+"-"+String.valueOf(now.getSecondOfMinute())+"-"+String.valueOf(now.getMillisOfSecond());
+
         log.info("DateTime:"+dateString+", Indexing image from url: " + image_url+" (originating from document with uuid: "+uuid+")");
 
+        int actualMinute=now.getMinuteOfHour();
+        
+        boolean printResults=false;
+        //check only if minute is changing
+        if (actualMinute!=lastMinute){
+        	if (actualMinute%resultsPeriod==0)
+        		printResults=true;
+        }
+        
+        lastMinute=actualMinute;
+        
+        
         try {
 			ir = IndexReader.open(directory);
 		} catch (IOException e) {
@@ -328,7 +352,44 @@ public class IndexBolt implements IRichBolt{
 			}
         	
         }
-        dumpAllScores();  
+        //dumpAllScores();  
+        
+        
+        if (printResults){
+        	dumpAllEvalScores();
+        	
+        	
+        	Query q=new FindBestImagesQuery(new MatchAllDocsQuery(),history);
+        	IndexSearcher s = new IndexSearcher(ir);
+            TopScoreDocCollector collector = TopScoreDocCollector.create(resultsLength, true);
+            try {
+				s.search(q, collector);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+            
+            ScoreDoc[] h = collector.topDocs().scoreDocs;
+            
+            for (ScoreDoc best:h){
+            	IndexableField f=null;
+            	IndexableField n=null;
+            	
+            	try {
+					f=ir.document(best.doc).getField("myid");
+					n=ir.document(best.doc).getField(DocumentBuilder.FIELD_NAME_IDENTIFIER);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+            	String myid=f.stringValue();
+            	String imageName=n.stringValue();
+            	String score=String.valueOf(getEvalScore(best.doc));
+            	log.info("Best document: "+imageName+" has score: "+score+" (id: "+myid+")");
+            	
+            }
+            
+        }
 
         try {
 			ir.close();
@@ -364,6 +425,16 @@ public class IndexBolt implements IRichBolt{
 		for (int i=0; i<ir.maxDoc(); i++) {
 			
 			log.info("Document score: "+getScore(i));
+		}
+	}
+	
+	/**
+     * Prints scores of all documents (no normalization)
+     */
+	private void dumpAllEvalScores(){
+		for (int i=0; i<ir.maxDoc(); i++) {
+			
+			log.info("Document score: "+getEvalScore(i));
 		}
 	}
 	
@@ -409,6 +480,50 @@ public class IndexBolt implements IRichBolt{
 			if (numRecords>0)
 				return score/numRecords;
 		    
+		    return score;
+		}
+			
+		
+		return -1.0F;
+	}
+	/**
+     * Computes evaluation score of given document (no normalization)
+     * @param docId - integer number of document
+     * @return Score of document 
+     */
+	private float getEvalScore(int docNumber){
+		Document d = null;
+		try {
+			d = ir.document(docNumber);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		if (d!=null){
+			IndexableField lengthField=d.getField("length");
+			int length=0;
+			if (lengthField !=null)
+				length=lengthField.numericValue().intValue();
+			
+			int start=0;
+			IndexableField startField=d.getField("start");
+			if (startField !=null)
+				start=startField.numericValue().intValue();
+		    
+			float score=0.0F;
+			DateTime now=DateTime.now();
+			for (int i=start;i<length;i++){
+				String fieldName=String.valueOf(i);
+				IndexableField field=d.getField(fieldName);
+				Field timeStampField=(Field) d.getField("t"+fieldName);
+				String[] values1=timeStampField.stringValue().split("-");
+				DateTime from=new DateTime(Integer.parseInt(values1[0]),Integer.parseInt(values1[1]),Integer.parseInt(values1[2]),Integer.parseInt(values1[3]),Integer.parseInt(values1[4]),Integer.parseInt(values1[5]),Integer.parseInt(values1[6]));
+				int diff=Minutes.minutesBetween(from, now).getMinutes();
+				int scoreCoef=history-diff;
+				if (scoreCoef>0)
+					score+=scoreCoef*field.numericValue().floatValue();
+				
+			}
 		    return score;
 		}
 			

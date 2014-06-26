@@ -24,9 +24,9 @@
 
 	<appender name="jstyleparser_file"
 		class="ch.qos.logback.core.rolling.RollingFileAppender">
-		<File>/tmp/jstyleparser.log</File>
+		<File>/tmp/jstyle.log</File>
 		<rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-			<FileNamePattern>/tmp/jstyleparser.%i.log.zip</FileNamePattern>
+			<FileNamePattern>/tmp/jstyle.%i.log.zip</FileNamePattern>
 			<MinIndex>1</MinIndex>
 			<MaxIndex>3</MaxIndex>
 		</rollingPolicy>
@@ -44,6 +44,44 @@
 			<Pattern>%-4relative %-5level %logger{35} - %msg%n</Pattern>
 		</layout>
 	</appender>
+	
+	<appender name="FILE" class="ch.qos.logback.core.FileAppender">
+	  <file>/tmp/storm.log</file>
+	  <append>true</append>
+	  <!-- encoders are assigned the type
+	      ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
+	  <encoder>
+	    <pattern>%-4relative [%thread] %-5level %logger{35} - %msg%n</pattern>
+	  </encoder>
+	</appender>
+
+	<logger name="org.fit.burgetr.webstorm.bolts.IndexBolt" additivity="false">
+		<level value="info" />
+		<appender-ref ref="FILE" />
+	</logger>
+	
+	<logger name="org.fit.burgetr.webstorm.bolts.AnalyzerBolt" additivity="false">
+		<level value="info" />
+		<appender-ref ref="FILE" />
+	</logger>
+	
+	<logger name="org.fit.burgetr.webstorm.bolts.DownloaderBolt" additivity="false">
+		<level value="info" />
+		<appender-ref ref="FILE" />
+	</logger>
+	
+	<logger name="org.fit.burgetr.webstorm.bolts.ExtractFeaturesBolt" additivity="false">
+		<level value="info" />
+		<appender-ref ref="FILE" />
+	</logger>
+	
+	<logger name="org.fit.burgetr.webstorm.bolts.FeedReaderBolt" additivity="false">
+		<level value="info" />
+		<appender-ref ref="FILE" />
+	</logger>
+	
+	
+	
 	
 	<logger name="test" additivity="false">
 		<level value="debug" />
