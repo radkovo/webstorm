@@ -37,7 +37,7 @@ public class RssMonitorTopology
         Logger logger = LoggerFactory.getLogger(RssMonitorTopology.class);
         logger.debug("TOPOLOGY START");
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
-        StatusPrinter.print(lc);
+        //StatusPrinter.print(lc);
         
         String uuid=UUID.randomUUID().toString();
         
