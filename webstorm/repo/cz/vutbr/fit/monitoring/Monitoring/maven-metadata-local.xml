@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>cz.vutbr.fit.monitoring</groupId>
+  <artifactId>Monitoring</artifactId>
+  <versioning>
+    <versions>
+      <version>0.0.1-SNAPSHOT</version>
+    </versions>
+    <lastUpdated>20141121092622</lastUpdated>
+  </versioning>
+</metadata>
