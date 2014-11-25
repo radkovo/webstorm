@@ -30,7 +30,6 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.search.*;
-import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +41,8 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Tuple;
 
 import org.fit.burgetr.webstorm.util.*;
+
+import cz.vutbr.fit.monitoring.Monitoring;
 
 /**
  * A bolt that indexes images
@@ -75,7 +76,7 @@ public class IndexBolt implements IRichBolt{
      */
     public IndexBolt(String uuid) throws SQLException {
     	webstormId=uuid;
-    	monitor=new Monitoring(webstormId);
+    	monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     	lastMinute=0;
     	updateInterval=1;
     	threshold=0.7F;
@@ -95,7 +96,7 @@ public class IndexBolt implements IRichBolt{
      */
     public IndexBolt(String uuid,int ui,int t, int h, int md) throws SQLException{
     	webstormId=uuid;
-    	monitor=new Monitoring(webstormId);
+    	monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     	lastMinute=0;
     	updateInterval=ui;
     	threshold=t;
@@ -383,7 +384,7 @@ public class IndexBolt implements IRichBolt{
 
         try {
         	Long estimatedTime = System.nanoTime() - startTime;
-			monitor.MonitorTuple("IndexBolt", uuid, hostname, estimatedTime);
+			monitor.MonitorTuple("IndexBolt", uuid,1, hostname, estimatedTime);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

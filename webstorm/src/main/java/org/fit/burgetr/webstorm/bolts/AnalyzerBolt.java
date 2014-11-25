@@ -23,11 +23,11 @@ import org.burgetr.segm.Segmentator;
 import org.burgetr.segm.tagging.taggers.PersonsTagger;
 import org.burgetr.segm.tagging.taggers.Tagger;
 import org.fit.burgetr.webstorm.util.LogicalTagLookup;
-import org.fit.burgetr.webstorm.util.Monitoring;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import cz.vutbr.fit.monitoring.Monitoring;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -68,7 +68,7 @@ public class AnalyzerBolt implements IRichBolt
         this.kwStreamId = kwStreamId;
         this.imgStreamId = imgStreamId;
         webstormId=uuid;
-        monitor=new Monitoring(webstormId);
+        monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     }
 
     @SuppressWarnings("rawtypes")
@@ -87,7 +87,7 @@ public class AnalyzerBolt implements IRichBolt
     public void execute(Tuple input)
     {
     	    long startTime = System.nanoTime();
-
+    	    
     		String baseurl = input.getString(1);
 	        String html = input.getString(2);
 	        @SuppressWarnings("unchecked")
@@ -111,7 +111,7 @@ public class AnalyzerBolt implements IRichBolt
 	                    {
 	                        if (!keyword.equals(name)){
 	                        	try {
-									monitor.MonitorTuple("AnalyzerBolt", uuid, hostname);
+									monitor.MonitorTuple("AnalyzerBolt", uuid,1, hostname);
 								} catch (SQLException e) {
 									// TODO Auto-generated catch block
 									e.printStackTrace();
@@ -139,7 +139,7 @@ public class AnalyzerBolt implements IRichBolt
 	                
 	                Long estimatedTime = System.nanoTime() - startTime;
 	                try {
-	                	monitor.MonitorTuple("AnalyzerBolt", uuid, hostname, estimatedTime);
+	                	monitor.MonitorTuple("AnalyzerBolt", uuid,1, hostname, estimatedTime);
 	                } catch (SQLException e) {
 	                	// TODO Auto-generated catch block
 	                	e.printStackTrace();

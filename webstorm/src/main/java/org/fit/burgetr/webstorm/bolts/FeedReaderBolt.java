@@ -16,7 +16,8 @@ import java.util.Map;
 import com.sun.syndication.feed.synd.SyndEntry;
 import com.sun.syndication.feed.synd.SyndFeed;
 
-import org.fit.burgetr.webstorm.util.Monitoring;
+import cz.vutbr.fit.monitoring.Monitoring;
+
 import org.rometools.fetcher.FeedFetcher;
 import org.rometools.fetcher.impl.HttpURLFeedFetcher;
 import org.slf4j.Logger;
@@ -56,7 +57,7 @@ public class FeedReaderBolt implements IRichBolt
      */
     public FeedReaderBolt(String uuid) throws SQLException {
     	webstormId=uuid;
-    	monitor=new Monitoring(webstormId);
+    	monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     }
 
     @SuppressWarnings("rawtypes")
@@ -98,7 +99,7 @@ public class FeedReaderBolt implements IRichBolt
                     {
                         log.info("New entry: " + entry.getTitle() + " " + entry.getUri() + " " + entry.getPublishedDate());
                         Long estimatedTime = System.nanoTime() - startTime;
-                        monitor.MonitorTuple("FeedReaderBolt", uuid, hostname, estimatedTime);
+                        monitor.MonitorTuple("FeedReaderBolt", uuid,1, hostname, estimatedTime);
                         collector.emit(new Values(entry.getUri(), entry.getTitle(),uuid));
                     }
                 }
