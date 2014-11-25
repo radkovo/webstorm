@@ -15,4 +15,4 @@ Requirements to run:
 ===================
 Running database on target monitoring server. Database should be created with attached sql script.
 With last commit (64b3d76848e38137b84c34e767cb8e1b28763dc0), database must be altered:
-ALTER TABLE profiling ADD COLUMN num_elements;
+ALTER TABLE profiling ADD COLUMN num_elements integer;
