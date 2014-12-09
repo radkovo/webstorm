@@ -19,8 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Map.Entry;
 
-import org.fit.burgetr.webstorm.util.Monitoring;
-
+import cz.vutbr.fit.monitoring.Monitoring;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.OutputFieldsDeclarer;
@@ -57,7 +56,7 @@ public class FeedURLSpout extends BaseRichSpout
     {
         this.listSourceUrl = listSourceUrl;
         webstormId=uuid;
-        monitor=new Monitoring(webstormId);
+        monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     }
     
     @SuppressWarnings("rawtypes")
@@ -95,7 +94,7 @@ public class FeedURLSpout extends BaseRichSpout
         Date now = new Date();
         String uuid=UUID.randomUUID().toString();
         try {
-			monitor.MonitorTuple("FeedUrlSpout", uuid, hostname);
+			monitor.MonitorTuple("FeedUrlSpout", uuid,1, hostname);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

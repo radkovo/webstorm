@@ -15,7 +15,7 @@ import java.net.UnknownHostException;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
-import org.fit.burgetr.webstorm.util.Monitoring;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.joda.time.DateTime;
 
+import cz.vutbr.fit.monitoring.Monitoring;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -57,7 +58,7 @@ public class DownloaderBolt implements IRichBolt
      */
     public DownloaderBolt(String uuid) throws SQLException {
     	webstormId=uuid;
-    	monitor = new Monitoring(webstormId);
+    	monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     }
     
     
@@ -128,7 +129,7 @@ public class DownloaderBolt implements IRichBolt
                 allImg.put(canonical, downloadUrl(u));
             }
             Long estimatedTime = System.nanoTime() - startTime;
-            monitor.MonitorTuple("DownloaderBolt", uuid, hostname, estimatedTime);
+            monitor.MonitorTuple("DownloaderBolt", uuid, 1,hostname, estimatedTime);
             collector.emit(new Values(title, urlstring, document.html(), allImg, uuid));
             collector.ack(input);
         } 
