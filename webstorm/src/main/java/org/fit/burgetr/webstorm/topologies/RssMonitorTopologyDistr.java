@@ -49,8 +49,8 @@ public class RssMonitorTopologyDistr
         
         
         //create spouts and bolt
-        FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt",uuid);
-        //FeedURLSpout urlSpout = new FeedURLSpout("http://valentine.farmacie.cz/~skoda/juniper/rss.txt",uuid);
+        //FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt",uuid);
+        FeedURLSpout urlSpout = new FeedURLSpout("http://valentine.farmacie.cz/~skoda/juniper/rss.txt",uuid);
         FeedReaderBolt reader = new FeedReaderBolt(uuid);
         DownloaderBolt downloader = new DownloaderBolt(uuid);
         AnalyzerBolt analyzer = new AnalyzerBolt("kw","img",uuid);
@@ -65,7 +65,7 @@ public class RssMonitorTopologyDistr
         builder.setBolt("FeedReaderBolt", reader, 3).shuffleGrouping("FeedUrlSpout");
         builder.setBolt("DownloaderBolt", downloader, 4).shuffleGrouping("FeedReaderBolt");
         builder.setBolt("AnalyzerBolt", analyzer, 3).shuffleGrouping("DownloaderBolt");
-        builder.setBolt("ExtractFeaturesBolt", extractor, 1).globalGrouping("AnalyzerBolt", "img");
+        builder.setBolt("ExtractFeaturesBolt", extractor, 2).globalGrouping("AnalyzerBolt", "img");
         builder.setBolt("IndexBolt", indexer,3).shuffleGrouping("ExtractFeaturesBolt");
         //builder.setBolt("nkstore", nkstore, 1).globalGrouping("analyzer", "kw");
 
@@ -81,9 +81,10 @@ public class RssMonitorTopologyDistr
         //conf.put("placement.downloader", "blade5.blades");
         
         // Configure the start time for analysis in ISO 8601
-        conf.put("advisor.analysis.startTime", "2014-05-31 17:30:00");
+        //conf.put("advisor.analysis.startTime", "2014-05-31 17:30:00");
         // Rescheduling interval in seconds
         conf.put("advisor.analysis.rescheduling", 40);
+        conf.put("advisor.analysis.deploymentId", uuid);
         
         // Submit topology
         StormSubmitter.submitTopology("Webstorm", conf, builder.createTopology());

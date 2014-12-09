@@ -16,6 +16,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -32,6 +36,8 @@ import backtype.storm.scheduler.WorkerSlot;
 public class BenchmarkScheduler implements IScheduler {
 	// Next rescheduling times by topologies (topology ID)
 	private Map<String, Date> reschedulingForTopology = new HashMap<String, Date>();
+	// Last rescheduling times by topologies (topology ID)
+	private Map<String, Date> lastReschedulingForTopology = new HashMap<String, Date>();
 	// End of profiling of topology
 	private Map<String, Date> endOfProfilingForTopology = new HashMap<String, Date>();
 	// For experiments the worst known case scheduling was done
@@ -40,12 +46,41 @@ public class BenchmarkScheduler implements IScheduler {
 	private Set<String> standardCaseDone = new HashSet<String>();
 	// Analysers for topologies (topology ID)
 	private Map<String, Analyser> analysers = new HashMap<String, Analyser>();
+	// Number of performance schedules done (for cycling benchmarking phase again)
+	private Map<String, Integer> performanceRescheduledTimes = new HashMap<String, Integer>();
+	
+	// Last applicated schedule
+	private Map<String, String> lastSchedule = new HashMap<String, String>(); 
+	
+	// SQL connection
+	private Connection conn = null;
 	
 	// ISO date formatter
 	private DateFormat isoFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 	
 	public void prepare(Map config) {
+		// -----------------------------------
+        // For Modifying records in time range with adding the schedule type to each record for easier stats generating
+        // WORKS only with one topology scheduled
+        // THIS IS NOT suitable for normal usage
+        String url = "jdbc:postgresql://knot28.fit.vutbr.cz/webstorm?user=webstorm&password=webstormdb88pass";
+		try {
+			conn = DriverManager.getConnection(url);
+			//conn.setAutoCommit(false); // We do only few inserts, autocommits are welcomed
+		} catch (SQLException e) {
+			System.out.println("Can't get connection to monitoring DB \n" + e.toString());
+		}
+		// ----------------------------------
 		
+		/* END OF CONNECTION - will exit when program is terminated
+		// FOR EXPERIMENTS with writting schedule type to monitoring DB
+        try {
+            conn.commit();
+            conn.close();
+		} catch (SQLException e) {
+			System.out.println(e.toString());
+		}
+		*/
 	} 
 
 	
@@ -63,8 +98,7 @@ public class BenchmarkScheduler implements IScheduler {
     	System.out.println("SchedulingAdvisor: begin scheduling");
         // Gets the topology which we want to schedule
         TopologyDetails topology = topologies.getByName("Webstorm");
-
-
+        
         // Make sure our topology is submitted
         if (topology != null) {
         	
@@ -83,15 +117,27 @@ public class BenchmarkScheduler implements IScheduler {
             if(reschedulingForTopology.containsKey(topology.getId()) && new Date().after(reschedulingForTopology.get(topology.getId()))){
             	// Unschedule
             	unscheduleTopology(topology, cluster);
+
+            	// Restart from benchmarking after X performance schedules
+            	if(performanceRescheduledTimes.containsKey(topology.getId()) && performanceRescheduledTimes.get(topology.getId()) >= 3){
+            		System.out.println("Reset - start from benchmarking... performance run times: " + performanceRescheduledTimes.get(topology.getId()).toString());
+            		// Reset all
+            		worstCaseDone.remove(topology.getId());
+            		standardCaseDone.remove(topology.getId());
+            		performanceRescheduledTimes.remove(topology.getId());
+            		//endOfProfilingForTopology.remove(topology.getId());
+            		//analysers.get(topology.getId()).setStartTime(new Date());
+            	}
             }
             
             
             boolean needsScheduling = cluster.needsScheduling(topology);
 
+            //
             // Do not schedule (just set reschedule time according to interval)
+            //
             if (!needsScheduling) {
-            	System.out.println("Websotrm topology DOES NOT NEED scheduling.");
-            	
+            	//System.out.println("Websotrm topology DOES NOT NEED scheduling.");
             	// Set rescheduling if not set for this topology
             	if(!reschedulingForTopology.containsKey(topology.getId())){
 	            	// Find the rescheduling interval and set next reschedule
@@ -100,15 +146,37 @@ public class BenchmarkScheduler implements IScheduler {
 	            	reschedulingForTopology.put(topology.getId(), nextReschedule);
             	}
             }
+            //
             // SCHEDULE
+            //
             else {
             	System.out.println("Webstorm topology needs scheduling.");
-                
             	// Find the rescheduling interval and set next reschedule
         		Long reschedulingInterval = Long.parseLong(conf.get("advisor.analysis.rescheduling").toString());
         		Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
         		reschedulingForTopology.put(topology.getId(), nextReschedule);
         		//System.out.println("Next reschedule set to: " + nextReschedule.toString());
+                
+            	//
+            	// Mark records in monitoring DB by scheduling type (after scheduling we mark entries from last reschedule) 
+            	if(lastReschedulingForTopology.containsKey(topology.getId())){
+            		//String sql = "UPDATE profiling SET schedule_type = '" + lastSchedule.get(topology.getId()) + "' WHERE "
+                	//		+ "timestamp > '" + isoFormatter.format(lastReschedulingForTopology.get(topology.getId())) +
+                	//		"' AND timestamp < '" + isoFormatter.format(new Date())+"'";
+            		String sql = "INSERT INTO schedules(schedule_type, \"from\", \"to\", \"length\", deployment_id) VALUES ('" + lastSchedule.get(topology.getId()) + "', "
+            				+ "'" + isoFormatter.format(lastReschedulingForTopology.get(topology.getId())) + "', "
+            				+ "'" + isoFormatter.format(new Date())+"', " + reschedulingInterval.toString() + ", '" + conf.get("advisor.analysis.deploymentId").toString() + "')";
+                	System.out.println("Setting the schedule type for old records... " + sql);
+            		try {
+	                	Statement stmt = conn.createStatement();
+		                stmt.executeUpdate(sql);
+		                stmt.close();
+	        		} catch (SQLException e) {
+	        			System.out.println(e.toString());
+	        		}
+            	}
+            	// Write last rescheduling for this topology
+            	lastReschedulingForTopology.put(topology.getId(), new Date());
             	
             	// Check if all hosts to executors were measured
             	// Schedule for performance
@@ -118,6 +186,7 @@ public class BenchmarkScheduler implements IScheduler {
             		
             		// Worst case schedule for comparison
             		if(!worstCaseDone.contains(topology.getId())){
+            			lastSchedule.put(topology.getId(), "worstcase");
             			System.out.println("==sched== Worst case scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
             					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
             			
@@ -127,6 +196,7 @@ public class BenchmarkScheduler implements IScheduler {
             		}
             		// Even scheduler for comparison
             		else if(!standardCaseDone.contains(topology.getId())){
+            			lastSchedule.put(topology.getId(), "even_scheduler");
             			System.out.println("==sched== Standard scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
             					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
             			
@@ -139,19 +209,31 @@ public class BenchmarkScheduler implements IScheduler {
             		}
             		// Performance schedule
             		else{
+            			lastSchedule.put(topology.getId(), "performance");
             			System.out.println("==sched== Performance scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
             					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
             			
             			// Clear rescheduling interval if set
-                		reschedulingForTopology.remove(topology.getId());
+                		//reschedulingForTopology.remove(topology.getId()); // not work
                 		
                 		
                 		scheduleForPerformance(topology, cluster, false);
+                		
+                		// Set the number of performance reschedules
+                		Integer scheduledTimes = 0;
+                		if(performanceRescheduledTimes.containsKey(topology.getId())){
+                			scheduledTimes = performanceRescheduledTimes.get(topology.getId());
+                		}
+                		performanceRescheduledTimes.put(topology.getId(), scheduledTimes + 1);
             		}
             		
             	}
             	// Schedule for profiling
             	else{
+            		lastSchedule.put(topology.getId(), "benchmark");
+            		System.out.println("==sched== Benchmark scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
+        					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
+            		
             		// Schedule executors to hosts where we don't have monitoring data
             		scheduleToNotObserved(topology, cluster);
             	}

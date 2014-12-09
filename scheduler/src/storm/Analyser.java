@@ -56,7 +56,7 @@ public class Analyser {
         	startTime = (String) conf.get("advisor.analysis.startTime");
         }
         else{
-			startTime = isoFormatter.format(new Date());
+			startTime = isoFormatter.format(new Date()); // Not work! - seems that the new Analyser object is crated after each benchmark reschedule
         }
         
         // Monitoring DB connection
@@ -192,5 +192,15 @@ public class Analyser {
 		}
 		
 		return schedule;
+	}
+	
+	/**
+	 * Set start time
+	 *  
+	 *  @return Map<String, List<String>>	List of measured executors for each host name.
+	 */
+	public void setStartTime(Date st)
+	{
+		startTime = isoFormatter.format(st);
 	}
 }
