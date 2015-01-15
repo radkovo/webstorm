@@ -21,6 +21,7 @@ import org.fit.burgetr.webstorm.bolts.ExtractFeaturesBolt;
 import org.fit.burgetr.webstorm.bolts.FeedReaderBolt;
 import org.fit.burgetr.webstorm.bolts.IndexBolt;
 import org.fit.burgetr.webstorm.spouts.FeedURLSpout;
+import org.mortbay.log.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,7 @@ public class RssMonitorTopology
         
         String uuid=UUID.randomUUID().toString();
         
+        Log.info("Deployment id: "+uuid);
         
         //create spouts and bolt
         FeedURLSpout urlSpout = new FeedURLSpout("http://www.fit.vutbr.cz/~burgetr/public/rss.txt",uuid);

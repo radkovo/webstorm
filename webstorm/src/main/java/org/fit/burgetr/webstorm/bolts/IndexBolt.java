@@ -2,10 +2,15 @@ package org.fit.burgetr.webstorm.bolts;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,6 +33,7 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.search.*;
 import org.joda.time.DateTime;
@@ -66,6 +72,8 @@ public class IndexBolt implements IRichBolt{
     private int history;
     private int maxDocuments;
     private int updateInterval;
+    private boolean ram;
+    private int best;
     
 
     /**
@@ -82,6 +90,8 @@ public class IndexBolt implements IRichBolt{
     	threshold=0.7F;
     	history=10;
     	maxDocuments=100;
+    	ram=false;
+    	best=100;
     }
     
     /**
@@ -91,10 +101,12 @@ public class IndexBolt implements IRichBolt{
      * @param t the threshold of image similarity, when records should be updated
      * @param h the history of similarity values that should be kept for similarity computation
      * @param md the maximum of documents, that should be indexed
+     * @param ram whether index should be stored in RAM
+     * @param best how many best documents should be scored
      * @throws SQLException 
      * @throws UnknownHostException 
      */
-    public IndexBolt(String uuid,int ui,int t, int h, int md) throws SQLException{
+    public IndexBolt(String uuid,int ui,int t, int h, int md,boolean ram,int best) throws SQLException{
     	webstormId=uuid;
     	monitor=new Monitoring(webstormId,"knot28.fit.vutbr.cz","webstorm","webstormdb88pass","webstorm");
     	lastMinute=0;
@@ -102,6 +114,8 @@ public class IndexBolt implements IRichBolt{
     	threshold=t;
     	history=h;
     	maxDocuments=md;
+    	this.ram=ram;
+    	this.best=best;
     }
 
 	@SuppressWarnings("rawtypes")
@@ -122,8 +136,20 @@ public class IndexBolt implements IRichBolt{
 			conf = new IndexWriterConfig(LuceneUtils.LUCENE_VERSION,
 	                new WhitespaceAnalyzer(LuceneUtils.LUCENE_VERSION));
 			}
-			if (directory==null)
-				directory = new RAMDirectory();
+			if (directory==null){
+				
+				if (ram){
+					directory = new RAMDirectory();
+				}
+				else{
+					try {
+						directory=FSDirectory.open(new File(System.getProperty("user.home")+"/index"));
+					} catch (IOException e) {
+						directory=new RAMDirectory();
+						e.printStackTrace();
+					}
+				}
+			}
 			if (iw==null){
 		        try {
 					iw = new IndexWriter(directory, conf);
@@ -296,6 +322,7 @@ public class IndexBolt implements IRichBolt{
         Document document = new Document();
         document.add(new Field(DocumentBuilder.FIELD_NAME_CEDD, feature));
         document.add(new Field(DocumentBuilder.FIELD_NAME_IDENTIFIER, name, Field.Store.YES, Field.Index.NOT_ANALYZED));
+        document.add(new Field("image_url",image_url,Field.Store.YES,Field.Index.NOT_ANALYZED));
         document.add(new Field("image", imageData));
         document.add(new Field("myid",UUID.randomUUID().toString(), Field.Store.YES, Field.Index.NOT_ANALYZED));
         
@@ -373,7 +400,27 @@ public class IndexBolt implements IRichBolt{
 			}
         	
         }
-        dumpAllScores();  
+        List<Score> allScores=computeScores();  
+        
+        log.info("Total number of documents currently indexed: "+String.valueOf(ir.maxDoc()));
+        
+        for (int i=0;i<allScores.size()&&i<best;i++){
+        	Document d=null;
+        	try {
+    			d = ir.document(allScores.get(i).getDocId());
+    		} catch (IOException e) {
+    			// TODO Auto-generated catch block
+    			e.printStackTrace();
+    		}
+    		if (d!=null){
+    			IndexableField nameField=d.getField(DocumentBuilder.FIELD_NAME_IDENTIFIER);
+    			String docName=nameField.stringValue();
+    			IndexableField imageUrlField=d.getField("image_url");
+    			String imageURL=imageUrlField.stringValue();
+    			log.info(String.valueOf(i+1)+". best image -> name: "+docName+", score: "+String.valueOf(allScores.get(i).getScore())+", image url:"+imageURL);
+    		}
+        	
+        }
 
         try {
 			ir.close();
@@ -393,11 +440,23 @@ public class IndexBolt implements IRichBolt{
 	
 	/**
      * Prints scores of all documents
+	 * @return 
      */
-	private void dumpAllScores(){
+	private List<Score> computeScores(){
+		List<Score> scores=new ArrayList<Score>();
 		for (int i=0; i<ir.maxDoc(); i++) {
-			log.info("Document score: "+getScore(i));
+			float score=getScore(i);
+			scores.add(new Score(score,i));
 		}
+		Collections.sort(scores, new Comparator<Score>(){
+			@Override
+			public int compare(Score o1, Score o2) {
+				
+				return o2.getScore().compareTo(o1.getScore());
+			}
+			
+		});
+		return scores;
 	}
 	
 	/**
