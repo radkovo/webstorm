@@ -74,7 +74,7 @@ public class IndexBolt implements IRichBolt{
     private int updateInterval;
     private boolean ram;
     private int best;
-    
+    private static Integer instances=0;
 
     /**
      * Creates a new IndexBolt.
@@ -123,7 +123,12 @@ public class IndexBolt implements IRichBolt{
 	public void prepare(Map stormConf, TopologyContext context,
 			OutputCollector collector) 
 	{
-
+		int nodeId;
+		
+		synchronized(instances){
+			nodeId=++instances;
+		}
+		
 		//this.collector=collector;
 		try{
 			hostname=InetAddress.getLocalHost().getHostName();
@@ -143,7 +148,10 @@ public class IndexBolt implements IRichBolt{
 				}
 				else{
 					try {
-						directory=FSDirectory.open(new File(System.getProperty("user.home")+"/index"));
+						String path=System.getProperty("user.home")+"/index/"+String.valueOf(nodeId)+"/";
+						File f=new File(path);
+						f.mkdirs();
+						directory=FSDirectory.open(f);
 					} catch (IOException e) {
 						directory=new RAMDirectory();
 						e.printStackTrace();
