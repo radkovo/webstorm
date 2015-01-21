@@ -1,5 +1,7 @@
 package storm;
 
+import java.io.UnsupportedEncodingException;
+
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -16,6 +18,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -51,6 +55,9 @@ public class BenchmarkScheduler implements IScheduler {
 	
 	// Last applicated schedule
 	private Map<String, String> lastSchedule = new HashMap<String, String>(); 
+	
+	// List of JSON placement files
+    private Map<String, ArrayList<String>> jsonPlacementFiles = new HashMap<String, ArrayList<String>>(); 
 	
 	// SQL connection
 	private Connection conn = null;
@@ -156,6 +163,7 @@ public class BenchmarkScheduler implements IScheduler {
         		Date nextReschedule = new Date(new Date().getTime() + 1000 * reschedulingInterval);
         		reschedulingForTopology.put(topology.getId(), nextReschedule);
         		//System.out.println("Next reschedule set to: " + nextReschedule.toString());
+        		String scheduleName = null;
                 
             	//
             	// Mark records in monitoring DB by scheduling type (after scheduling we mark entries from last reschedule) 
@@ -186,6 +194,7 @@ public class BenchmarkScheduler implements IScheduler {
             		
             		// Worst case schedule for comparison
             		if(!worstCaseDone.contains(topology.getId())){
+            			scheduleName = "Worstcase";
             			lastSchedule.put(topology.getId(), "worstcase");
             			System.out.println("==sched== Worst case scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
             					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
@@ -196,6 +205,7 @@ public class BenchmarkScheduler implements IScheduler {
             		}
             		// Even scheduler for comparison
             		else if(!standardCaseDone.contains(topology.getId())){
+            			scheduleName = "Standard";
             			lastSchedule.put(topology.getId(), "even_scheduler");
             			System.out.println("==sched== Standard scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
             					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
@@ -209,6 +219,7 @@ public class BenchmarkScheduler implements IScheduler {
             		}
             		// Performance schedule
             		else{
+            			scheduleName = "Heterogeneity";
             			lastSchedule.put(topology.getId(), "performance");
             			System.out.println("==sched== Performance scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
             					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
@@ -230,6 +241,7 @@ public class BenchmarkScheduler implements IScheduler {
             	}
             	// Schedule for profiling
             	else{
+            		scheduleName = "Benchmark";
             		lastSchedule.put(topology.getId(), "benchmark");
             		System.out.println("==sched== Benchmark scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
         					"' AND timestamp < '" + isoFormatter.format(reschedulingForTopology.get(topology.getId()))+"'");
@@ -237,6 +249,9 @@ public class BenchmarkScheduler implements IScheduler {
             		// Schedule executors to hosts where we don't have monitoring data
             		scheduleToNotObserved(topology, cluster);
             	}
+            	
+            	// Save resulting schedule to JSON file
+            	this.writeScheduleToJson(cluster, topology, scheduleName);
             }
         }
     }
@@ -350,10 +365,10 @@ public class BenchmarkScheduler implements IScheduler {
 					}
 					// If no slots were found, free some (makes the rest of executors run on one host)
 					// DOES NOT WORK - we have to first clean slots and then do all the scheduling
-					if(slotsFound == 0){
-						cluster.freeSlots(cluster.getAssignableSlots(supervisors.get(0)));
-						continue noAvailableSlotsLoop;
-					}
+					//if(slotsFound == 0){
+					//	cluster.freeSlots(cluster.getAssignableSlots(supervisors.get(0)));
+					//	continue noAvailableSlotsLoop;
+					//}
 	        	}
 	        }
 	        break;
@@ -585,6 +600,102 @@ public class BenchmarkScheduler implements IScheduler {
         }
         else{
         	return false;
+        }
+    }
+    
+    /**
+     * Writes the current schedule to a JSON file. 
+     */
+    public void writeScheduleToJson(Cluster cluster, TopologyDetails topology, String scheduleName)
+    {
+    	SchedulerAssignment assignment = cluster.getAssignmentById(topology.getId());
+    	Map<ExecutorDetails, WorkerSlot> executorToSlot = assignment.getExecutorToSlot();
+    	
+    	// Name of the bolt (component) from the executor details
+    	Map<ExecutorDetails, String> executorToComponent = topology.getExecutorToComponent();
+    	
+    	Map<String, List<String>> placementMap = new HashMap<String, List<String>>();
+    	
+    	System.out.println("Placement JSON:");
+        for(Entry<ExecutorDetails, WorkerSlot> e : executorToSlot.entrySet()){
+        	WorkerSlot slot = e.getValue();
+        	SupervisorDetails supervisor = cluster.getSupervisorById(slot.getNodeId());
+        	
+        	String componentName = executorToComponent.get(e.getKey());
+        	String host = supervisor.getHost();
+        	
+        	// We have to skip the "__acker" components
+        	if(componentName.equals("__acker")){
+        		continue;
+        	}
+        	
+        	if(!placementMap.containsKey(host)){
+        		placementMap.put(host, new ArrayList<String>());
+        	}
+        	placementMap.get(host).add(componentName);
+        }
+        
+        // Create JSON from the map
+        String placementJson = "{"; //placementMap.toString().replace('=', ':'); // replace "=" to ":" and get JSON structure...
+        for(Entry<String, List<String>> e : placementMap.entrySet()){
+        	placementJson += "\"" + e.getKey() + "\":[";
+        	for(String h : e.getValue()){
+        		placementJson += "\"" + h + "\",";
+        	}
+        	placementJson += "],";
+        }
+        placementJson += "}";
+        // Correct the wrong "," in JSON
+        placementJson = placementJson.replace(",]", "]").replace(",}", "}");
+        
+        
+        
+        Date currentTimestamp = new Date();
+        
+        // The rest of the JSON data (info and timestamp)
+        placementJson = "{\"info\":\"" + scheduleName + "\",\"timestamp\":\""+ isoFormatter.format(currentTimestamp) +"\",\"placement\":" 
+        		+ placementJson + "}";
+        
+        // Write to file
+        DateFormat timestampForFilenameFormatter = new SimpleDateFormat("yyyyMMddHHmmss");
+        String path=System.getProperty("user.home")+"/public_html/";
+        String filename = "placement-" + scheduleName + "-" + timestampForFilenameFormatter.format(currentTimestamp) + ".json";
+        try{
+	        PrintWriter writer = new PrintWriter(path + filename, "UTF-8");
+	        writer.print(placementJson);
+	        writer.close();
+        }
+        catch(FileNotFoundException e){
+        	System.out.println(e.toString());
+        }
+        catch(UnsupportedEncodingException e){
+        	System.out.println(e.toString());
+        }
+        
+        // Save placement to list of JSON placements and write the list to file
+        if(!jsonPlacementFiles.containsKey(topology.getId())){
+        	jsonPlacementFiles.put(topology.getId(), new ArrayList<String>());
+    	}
+        jsonPlacementFiles.get(topology.getId()).add(filename);
+        // Prepare list in JSON
+        String placementListJson = "{\"data\":[";
+        for(String file : jsonPlacementFiles.get(topology.getId())){
+        	placementListJson += "\"" + file + "\",";
+        }
+        placementListJson += "]}";
+        // Correct the wrong "," in JSON
+        placementListJson = placementListJson.replace(",]", "]").replace(",}", "}");
+        
+        try{
+	        PrintWriter writer = new PrintWriter(path + "list.json", "UTF-8");
+	        writer.print(placementListJson);
+	        writer.close();
+        }
+        catch(FileNotFoundException e){
+        	System.out.println(e.toString());
+        }
+        catch(UnsupportedEncodingException e){
+        	System.out.println(e.toString());
         }
     }
 }
