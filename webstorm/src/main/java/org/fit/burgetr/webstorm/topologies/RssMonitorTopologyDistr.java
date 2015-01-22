@@ -7,18 +7,19 @@ package org.fit.burgetr.webstorm.topologies;
 
 import java.net.UnknownHostException;
 import java.sql.SQLException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.UUID;
+import java.util.Date;
 
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.topology.TopologyBuilder;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.util.StatusPrinter;
-
 import backtype.storm.StormSubmitter;
 import backtype.storm.generated.AlreadyAliveException;
 import backtype.storm.generated.InvalidTopologyException;
-
 
 import org.fit.burgetr.webstorm.bolts.AnalyzerBolt;
 import org.fit.burgetr.webstorm.bolts.DownloaderBolt;
@@ -36,6 +37,8 @@ import org.slf4j.LoggerFactory;
  */
 public class RssMonitorTopologyDistr
 {
+	// ISO date formatter
+	private static DateFormat isoFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 
     public static void main(String[] args) throws SQLException, UnknownHostException, AlreadyAliveException, InvalidTopologyException
     {
@@ -75,16 +78,23 @@ public class RssMonitorTopologyDistr
         conf.setNumWorkers(8);
         conf.setMaxSpoutPending(5000);
         
+        
         // Configure supervisors for spout and bolt types
         //conf.put("placement.analyzer", "blade6.blades");
         //conf.put("placement.reader", "knot27.fit.vutbr.cz");
         //conf.put("placement.downloader", "blade5.blades");
         
+        // Benchmark scheduler behavior
+        conf.put("advisor.noMoreReschedulesAfterPerformance", 1); // Do not reschedule any more when performance schedule is run
+        conf.put("advisor.skipWorstCaseSchedule", 1); // Do not schedule worstcase
+        conf.put("advisor.skipStandardSchedule", 0); // Do not schedule by standard scheduler 
+        conf.put("advisor.forceBenchmark", 1); // Benchmark reschedules even if monitoring data already exists
         // Configure the start time for analysis in ISO 8601
         //conf.put("advisor.analysis.startTime", "2014-05-31 17:30:00");
         // Rescheduling interval in seconds
         conf.put("advisor.analysis.rescheduling", 40);
         conf.put("advisor.analysis.deploymentId", uuid);
+        conf.put("advisor.topologyStartedDate", isoFormatter.format(new Date())); // The date when the topology have started
         
         // Submit topology
         StormSubmitter.submitTopology("Webstorm", conf, builder.createTopology());

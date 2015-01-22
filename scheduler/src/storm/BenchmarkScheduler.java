@@ -1,7 +1,7 @@
 package storm;
 
+import java.awt.image.ConvolveOp;
 import java.io.UnsupportedEncodingException;
-
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -121,7 +121,9 @@ public class BenchmarkScheduler implements IScheduler {
             
             System.out.println("Reschedules: " + reschedulingForTopology);
             // Check if the rescheduling is needed, if so, unschedule the topology
-            if(reschedulingForTopology.containsKey(topology.getId()) && new Date().after(reschedulingForTopology.get(topology.getId()))){
+            if(reschedulingForTopology.containsKey(topology.getId()) && new Date().after(reschedulingForTopology.get(topology.getId()))
+            		&& (!performanceRescheduledTimes.containsKey(topology.getId()) || !(performanceRescheduledTimes.get(topology.getId()) > 0 && Integer.parseInt(conf.get("advisor.noMoreReschedulesAfterPerformance").toString()) == 1)) // Do not do any reschedules if the Performance schedule should be final
+            ){
             	// Unschedule
             	unscheduleTopology(topology, cluster);
 
@@ -193,7 +195,7 @@ public class BenchmarkScheduler implements IScheduler {
             		//reschedulingForTopology.remove(topology.getId());
             		
             		// Worst case schedule for comparison
-            		if(!worstCaseDone.contains(topology.getId())){
+            		if(!worstCaseDone.contains(topology.getId()) && Integer.parseInt((String)conf.get("advisor.skipWorstCaseSchedule").toString()) == 0){
             			scheduleName = "Worstcase";
             			lastSchedule.put(topology.getId(), "worstcase");
             			System.out.println("==sched== Worst case scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
@@ -204,7 +206,7 @@ public class BenchmarkScheduler implements IScheduler {
             			worstCaseDone.add(topology.getId());
             		}
             		// Even scheduler for comparison
-            		else if(!standardCaseDone.contains(topology.getId())){
+            		else if(!standardCaseDone.contains(topology.getId()) && Integer.parseInt((String)conf.get("advisor.skipStandardSchedule").toString()) == 0){
             			scheduleName = "Standard";
             			lastSchedule.put(topology.getId(), "even_scheduler");
             			System.out.println("==sched== Standard scheduling (from, to): timestamp > '" + isoFormatter.format(new Date()) +
@@ -397,8 +399,20 @@ public class BenchmarkScheduler implements IScheduler {
      */
     public void scheduleToNotObserved(TopologyDetails topology, Cluster cluster)
     {
-    	// Map of already measured executor types per host
-    	Map<String, List<String>> measured = analysers.get(topology.getId()).getMeasuredHosts();
+    	// Configuration of topology
+        Map conf = topology.getConf();
+        
+        // Map of already measured hosts and executors
+        Map<String, List<String>> measured = null;
+        
+        // Check whether we should force benchmark - if so, we set the startTime for getMeasuredHosts 
+        // to time of this topology's deployment insted of startTime of monitoring data
+        if(Integer.parseInt((String)conf.get("advisor.forceBenchmark").toString()) == 1){
+        	measured = analysers.get(topology.getId()).getMeasuredHosts((String)conf.get("advisor.topologyStartedDate"));
+        }
+        else{
+        	measured = analysers.get(topology.getId()).getMeasuredHosts();
+        }
     	System.out.println("Measured: " + measured.toString());
     	
     	// Map of to be placed executor types per host
@@ -576,11 +590,24 @@ public class BenchmarkScheduler implements IScheduler {
      * Writes Date of end of profiling into endOfProfillingForTopology Map.
      * 
      * @param topology
-     * @return Are all executor to host combinations measured?
+     * @return Were all executor to host combinations measured?
      */
     public boolean allExecutorsToHostsMeasured(TopologyDetails topology)
     {
-    	Map<String, List<String>> measured = analysers.get(topology.getId()).getMeasuredHosts();
+    	// Configuration of topology
+        Map conf = topology.getConf();
+        
+        Map<String, List<String>> measured = null;
+        
+        // Check whether we should force benchmark - if so, we set the startTime for getMeasuredHosts 
+        // to time of this topology's deployment insted of startTime of monitoring data
+        if(Integer.parseInt((String)conf.get("advisor.forceBenchmark").toString()) == 1){
+        	measured = analysers.get(topology.getId()).getMeasuredHosts((String)conf.get("advisor.topologyStartedDate"));
+        }
+        else{
+        	measured = analysers.get(topology.getId()).getMeasuredHosts();
+        }
+    	
     	
     	if(measured.isEmpty()){
     		return false;
@@ -699,3 +726,4 @@ public class BenchmarkScheduler implements IScheduler {
         }
     }
 }
+	

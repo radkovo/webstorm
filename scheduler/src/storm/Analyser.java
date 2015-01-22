@@ -78,10 +78,22 @@ public class Analyser {
 	
 	/**
 	 * Get all hosts/executors combinations that have been measured.
+	 * Uses the start time preconfigured for this topology...
 	 *  
 	 *  @return Map<String, List<String>>	List of measured executors for each host name.
 	 */
 	public Map<String, List<String>> getMeasuredHosts()
+	{
+		return getMeasuredHosts(startTime);
+	}
+	
+	/**
+	 * Get all hosts/executors combinations that have been measured.
+	 *  
+	 *  @param	String						ISO timestamp - Start time to check the data
+	 *  @return Map<String, List<String>>	List of measured executors for each host name.
+	 */
+	public Map<String, List<String>> getMeasuredHosts(String startTime)
 	{
 		Map<String, List<String>> measured = new HashMap<String, List<String>>();
 		

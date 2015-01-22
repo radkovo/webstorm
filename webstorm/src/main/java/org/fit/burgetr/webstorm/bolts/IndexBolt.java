@@ -148,9 +148,10 @@ public class IndexBolt implements IRichBolt{
 				}
 				else{
 					try {
-						String path=System.getProperty("user.home")+"/index/"+String.valueOf(nodeId)+"/";
+						String path=System.getProperty("user.home")+"/index/"+String.valueOf(context.getThisTaskIndex())+"/";
 						File f=new File(path);
 						f.mkdirs();
+						for(File file: f.listFiles()) file.delete(); // Clen directory from files of old schedules because of stucked locks
 						directory=FSDirectory.open(f);
 					} catch (IOException e) {
 						directory=new RAMDirectory();
